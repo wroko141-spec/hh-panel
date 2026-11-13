@@ -709,12 +709,22 @@ $('#rSave').addEventListener('change', e => $('#rTitle').hidden = !e.target.chec
 $('#rSal').addEventListener('change', e => { const n = parseSal(e.target.value); e.target.value = n ? fmt(n) : ''; });
 
 let polling = null;
+// понятное объяснение, почему собрано столько, а не «до N»
+function doneText(j) {
+  const s = j.search || {}, limit = (s.pages || 1) * 50;
+  if (!j.found) return '<b>Готово.</b>';
+  if (j.found >= (j.total || 0))
+    return `<b>Готово: собраны все ${j.found}.</b> На hh.ru по этим условиям больше вакансий нет, поэтому лимит «до ${limit}» не понадобился.`
+      + ((s.experience || s.work_format || s.salary || s.search_field !== 'everywhere')
+        ? `<br><br>Чтобы найти больше, ослабьте условия: ${[s.search_field !== 'everywhere' && 'отметьте «искать и в описании»', s.work_format && 'уберите формат', s.experience && 'уберите опыт', s.salary && 'уберите зарплату'].filter(Boolean).join(', ')}.` : '');
+  return `<b>Готово: собрано ${j.found} из ${fmt(j.total)}.</b> Это лимит «до ${limit}». Чтобы собрать больше, выберите больший объём.`;
+}
 function showJob(j) {
   const pct = j.state === 'done' ? 100 : Math.round(j.page / Math.max(j.pages, 1) * 100);
   const s = j.search || {};
   $('#rState').innerHTML = `<p class="pst"><b>${esc(s.title || '')}</b></p>
     <div class="prog"><i style="width:${pct}%"></i></div>
-    <p class="pst">${j.state === 'done' ? `<b>Готово.</b> Собрано ${j.found} из ${fmt(j.total)} на hh.ru.`
+    <p class="pst">${j.state === 'done' ? doneText(j)
       : j.state === 'error' ? 'Сбор остановился.'
       : `Страница <b>${j.page}</b> из ${j.pages} · собрано <b>${j.found}</b>${j.total != null ? ` · всего на hh: ${fmt(j.total)}` : ''}`}</p>
     ${j.state === 'error' ? `<p class="perr">${esc(j.error || 'Неизвестная ошибка')}</p>` : ''}
