@@ -18,7 +18,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 SKILLS = {
     "Python": r"python|питон", "Django": r"django", "FastAPI": r"fastapi", "Flask": r"flask",
     "SQL": r"\bsql\b", "PostgreSQL": r"postgre", "MySQL": r"mysql", "Redis": r"redis",
-    "Git": r"\bgit\b", "Docker": r"docker", "Linux": r"linux", "REST API": r"rest|\bapi\b",
+    "Git": r"\bgit\b", "Docker": r"docker", "Linux": r"linux", "REST API": r"\brest\b|\bapi\b",
     "JavaScript": r"javascript|\bjs\b", "TypeScript": r"typescript|\bts\b", "React": r"react",
     "Vue": r"\bvue", "Node.js": r"node", "HTML/CSS": r"\bhtml|\bcss", "Figma": r"figma",
     "PHP": r"\bphp", "Java": r"\bjava\b", "C#": r"c#|\.net", "C++": r"c\+\+", "Go": r"\bgo\b|golang",
@@ -161,8 +161,8 @@ def main():
             log("  ошибка:", e)
             stats[s["id"]] = {"error": str(e)}
             continue
-        sal = [v["salary_from"] or v["salary_to"] for v in items
-               if (v["salary_from"] or v["salary_to"]) and v["currency"] == "RUR"]
+        sal = [v["salary_from"] or v["salary_to"] for v in items   # только месячная в рублях
+               if (v["salary_from"] or v["salary_to"]) and v["currency"] == "RUR" and v["salary_mode"] in (None, "MONTH")]
         stats[s["id"]] = {"total": total, "got": len(items), "median": round(statistics.median(sal)) if sal else None}
         for v in items:
             prev = seen.get(v["id"]) or old.get(v["id"])
