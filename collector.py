@@ -61,16 +61,14 @@ def normalize(v):
     req, resp = clean(sn.get("req")), clean(sn.get("resp"))
     text = f"{v.get('name', '')} {req} {resp}".lower()
     sal_from, sal_to = c.get("perModeFrom") or c.get("from"), c.get("perModeTo") or c.get("to")
-    if c.get("gross") and c.get("currencyCode") == "RUR":   # «до вычета» -> «на руки» (минус 13%)
-        sal_from = sal_from and round(sal_from * .87)
-        sal_to = sal_to and round(sal_to * .87)
     return {
         "id": v["vacancyId"],
         "name": v.get("name", ""),
         "company": (v.get("company") or {}).get("visibleName") or (v.get("company") or {}).get("name", ""),
         "rating": ((v.get("company") or {}).get("employerReviews") or {}).get("totalRating"),
         "city": (v.get("area") or {}).get("name", ""),
-        "salary_from": sal_from, "salary_to": sal_to,
+        "salary_from": sal_from, "salary_to": sal_to,      # как в вакансии на hh
+        "gross": bool(c.get("gross")),                     # True = «до вычета налогов»
         "currency": c.get("currencyCode"),
         "salary_mode": c.get("mode"),
         "experience": EXP.get(v.get("workExperience"), v.get("workExperience") or ""),
@@ -85,6 +83,7 @@ def normalize(v):
 
 def run_search(s):
     params = {"text": s["text"], "area": s.get("area", 113), "items_on_page": 50,
+              "search_field": s.get("search_field", "name"),   # искать слова только в названии вакансии
               "enable_snippets": "true", "order_by": "publication_time"}
     for k in ("experience", "work_format", "salary", "only_with_salary"):
         if s.get(k):
@@ -179,10 +178,24 @@ def main():
         sys.exit(1)
 
     cutoff = (now - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%dT%H:%M")
+    keep = os.environ.get("HH_FRESH") != "1"   # HH_FRESH=1 - выбросить всё, чего нет в текущей выдаче
     for vid, v in old.items():           # не нашли сейчас, но видели недавно - оставляем
-        if vid not in seen and v.get("last_seen", "") >= cutoff:
+        if keep and vid not in seen and v.get("last_seen", "") >= cutoff:
             seen[vid] = v
-    vac = sorted(seen.values(), key=lambda v: v.get("published", ""), reverse=True)
+    # одна и та же вакансия, размещённая в нескольких городах, -> одна карточка со списком городов
+    groups = {}
+    for v in sorted(seen.values(), key=lambda v: v.get("published", ""), reverse=True):
+        k = (v["name"].strip().lower(), v["company"], v["salary_from"], v["salary_to"])
+        if k in groups:
+            g = groups[k]
+            g["copies"] = g.get("copies", 1) + 1
+            if v["city"] not in g["cities"]:
+                g["cities"].append(v["city"])
+            g["searches"] = sorted(set(g["searches"]) | set(v["searches"]))
+        else:
+            v["cities"], v["copies"] = [v["city"]], 1
+            groups[k] = v
+    vac = list(groups.values())
     save("vacancies.json", {"updated": stamp, "searches": searches, "stats": stats, "vacancies": vac})
     history.append({"t": stamp, **{k: {"total": x.get("total"), "median": x.get("median")}
                                    for k, x in stats.items() if "total" in x}})
