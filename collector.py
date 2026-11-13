@@ -2,9 +2,13 @@
 
 Открывает страницы поиска hh.ru (как обычный браузер), достаёт из них данные
 о вакансиях и складывает в data/vacancies.json и data/history.json.
-Запросы поиска лежат в searches.json. Только стандартная библиотека Python.
+
+- Плановый сбор: `python3 collector.py` - все подборки из searches.json (таймер раз в 6 часов).
+- Ручной сбор: server.py вызывает collect() + merge() для одной подборки из панели.
+Только стандартная библиотека Python.
 """
-import html, json, os, random, re, statistics, sys, time, urllib.parse, urllib.request
+import base64, fcntl, html, json, os, random, re, statistics, subprocess, sys, time, urllib.parse, urllib.request
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -27,10 +31,15 @@ SKILLS = {
 }
 EXP = {"noExperience": "нет", "between1And3": "1–3 года", "between3And6": "3–6 лет", "moreThan6": "6+ лет"}
 FMT = {"REMOTE": "удалёнка", "HYBRID": "гибрид", "ON_SITE": "офис", "FIELD_WORK": "разъездная"}
+SEARCH_KEYS = ("experience", "work_format", "salary", "only_with_salary")
 
 
 def log(*a):
     print(datetime.now(MSK).strftime("%H:%M:%S"), *a, flush=True)
+
+
+def now_stamp():
+    return datetime.now(MSK).strftime("%Y-%m-%dT%H:%M")
 
 
 def fetch(params):
@@ -89,15 +98,17 @@ def mid(v):
     return (a + b) / 2 if a and b else a or b
 
 
-def run_search(s):
+def run_search(s, progress=None):
+    """Одна подборка: до s["pages"] страниц по 50 вакансий. progress(page, pages, found, total)."""
     params = {"text": s["text"], "area": s.get("area", 113), "items_on_page": 50,
-              "search_field": s.get("search_field", "name"),   # искать слова только в названии вакансии
               "enable_snippets": "true", "order_by": "publication_time"}
-    for k in ("experience", "work_format", "salary", "only_with_salary"):
+    if s.get("search_field", "name") == "name":   # по умолчанию слова ищутся только в названии вакансии
+        params["search_field"] = "name"
+    for k in SEARCH_KEYS:
         if s.get(k):
             params[k] = s[k]
-    found, total = [], 0
-    for page in range(s.get("pages", 2)):
+    found, total, pages = [], 0, s.get("pages", 2)
+    for page in range(pages):
         params["page"] = page
         res = fetch(params)
         total = res.get("totalResults") or total
@@ -105,7 +116,10 @@ def run_search(s):
         items = [v for v in raw if not v.get("@isAdv")]
         found += [normalize(v) for v in items]
         log(f"  {s['id']} стр.{page + 1}: {len(items)}")
-        if len(raw) < 50:
+        last = len(raw) < 50 or page == pages - 1
+        if progress:
+            progress(page + 1, pages if not last else page + 1, len(found), total)
+        if last:
             break
         time.sleep(random.uniform(3, 6))   # пауза, чтобы не нагружать hh и не словить капчу
     return found, total
@@ -127,7 +141,149 @@ def save(name, obj):
     os.replace(tmp, os.path.join(DATA, name))
 
 
-def notify(new, searches):
+@contextmanager
+def data_lock():
+    """Плановый и ручной сбор не должны писать в data/ и git одновременно."""
+    os.makedirs(DATA, exist_ok=True)
+    with open(os.path.join(DATA, ".lock"), "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def saved_searches():
+    with open(os.path.join(ROOT, "searches.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_saved(searches):
+    with open(os.path.join(ROOT, "searches.json"), "w", encoding="utf-8") as f:
+        f.write("[\n" + ",\n".join("  " + json.dumps(s, ensure_ascii=False) for s in searches) + "\n]\n")
+
+
+def collect(searches, progress=None):
+    """Запускает поиски. Возвращает {id: (items, total)} или {id: Exception}."""
+    out = {}
+    for i, s in enumerate(searches):
+        log("Поиск:", s["title"])
+        try:
+            out[s["id"]] = run_search(s, progress)
+        except Exception as e:
+            log("  ошибка:", e)
+            out[s["id"]] = e
+        if i < len(searches) - 1:
+            time.sleep(random.uniform(3, 6))
+    return out
+
+
+def merge(results, run_searches, fresh=False):
+    """Вливает результаты в data/. Подборки, которые сейчас не запускались, не трогает.
+    fresh=True - выбросить вакансии запущенных подборок, которых нет в текущей выдаче.
+    Возвращает новые (впервые увиденные) вакансии."""
+    stamp = now_stamp()
+    with data_lock():
+        data = load("vacancies.json", {})
+        old = {}                                   # любой id склеенной карточки -> карточка
+        for v in data.get("vacancies", []):
+            for i in v.get("ids") or [v["id"]]:
+                old[i] = v
+        stats = data.get("stats", {})
+        known = {s["id"]: s for s in data.get("searches", [])}
+        ran = {s["id"] for s in run_searches}
+        ok_ids, seen = set(), {}
+        for s in run_searches:
+            known[s["id"]] = s
+            res = results.get(s["id"])
+            if not isinstance(res, tuple):
+                stats[s["id"]] = {**stats.get(s["id"], {}), "error": str(res or "не запускался")}
+                continue
+            items, total = res
+            ok_ids.add(s["id"])
+            sal = [m for m in map(mid, items) if m]
+            stats[s["id"]] = {"total": total, "got": len(items), "t": stamp,
+                              "median": round(statistics.median(sal)) if sal else None}
+            for v in items:
+                if v["id"] in seen:                # уже нашли в другой подборке этого запуска
+                    base = set(seen[v["id"]]["searches"])
+                    prev = seen[v["id"]]
+                else:                              # подборки, которые сейчас не запускались, сохраняем
+                    prev = old.get(v["id"]) or {}
+                    base = set(prev.get("searches", [])) - ran
+                v["searches"] = sorted(base | {s["id"]})
+                v["first_seen"] = prev.get("first_seen", stamp)
+                v["last_seen"] = stamp
+                seen[v["id"]] = v
+
+        cutoff = (datetime.now(MSK) - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%dT%H:%M")
+        for v in {id(x): x for x in old.values()}.values():   # каждая старая карточка один раз
+            if any(i in seen for i in v.get("ids") or [v["id"]]):
+                continue
+            vs = set(v.get("searches", []))
+            if vs & (ran - ok_ids):                # её поиск упал (капча) - не считаем пропавшей
+                v["last_seen"] = max(v.get("last_seen", ""), stamp)
+            elif fresh and vs & ran:
+                continue
+            if v.get("last_seen", "") < cutoff:
+                continue
+            seen[v["id"]] = v
+
+        # одна и та же вакансия в нескольких городах -> одна карточка со списком городов
+        groups = {}
+        for v in sorted(seen.values(), key=lambda v: v.get("published", ""), reverse=True):
+            k = (v["name"].strip().lower(), v["company"], v["salary_from"], v["salary_to"])
+            ids = v.get("ids") or [v["id"]]
+            if k in groups:
+                g = groups[k]
+                g["ids"] += [i for i in ids if i not in g["ids"]]
+                for c in v.get("cities") or [v["city"]]:
+                    if c not in g["cities"]:
+                        g["cities"].append(c)
+                g["searches"] = sorted(set(g["searches"]) | set(v["searches"]))
+                g["first_seen"] = min(g["first_seen"], v["first_seen"])
+                g["last_seen"] = max(g["last_seen"], v["last_seen"])
+            else:
+                v["ids"] = list(dict.fromkeys([v["id"]] + list(ids)))
+                v["cities"] = list(v.get("cities") or [v["city"]])
+                groups[k] = v
+        vac = list(groups.values())
+        for v in vac:
+            v["copies"] = len(v["ids"])
+        new = [g for g in vac if g["first_seen"] == stamp]
+
+        # подборки: сохранённые + разовые, у которых ещё есть вакансии (свежие сверху)
+        saved = saved_searches()
+        saved_ids = {s["id"] for s in saved}
+        used = {sid for v in vac for sid in v["searches"]}
+        adhoc = [s for sid, s in known.items() if sid not in saved_ids and sid in used]
+        all_s = saved + sorted(adhoc, key=lambda s: stats.get(s["id"], {}).get("t", ""), reverse=True)
+        live = {s["id"] for s in all_s}
+        stats = {k: x for k, x in stats.items() if k in live}
+        save("vacancies.json", {"updated": stamp, "searches": all_s, "stats": stats, "vacancies": vac})
+        history = load("history.json", [])
+        history.append({"t": stamp, **{k: {"total": stats[k]["total"], "median": stats[k]["median"]} for k in ok_ids}})
+        save("history.json", history[-500:])
+    log(f"Готово: всего {len(vac)}, новых {len(new)}")
+    return new
+
+
+def publish(msg):
+    """git commit + push данных, чтобы обновилась копия на GitHub Pages."""
+    with data_lock():
+        subprocess.run(["git", "add", "data", "searches.json"], cwd=ROOT, check=True)
+        if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT).returncode == 0:
+            return
+        subprocess.run(["git", "-c", "user.name=wroko141-spec", "-c", "user.email=wroko141-spec@users.noreply.github.com",
+                        "commit", "-qm", msg], cwd=ROOT, check=True)
+        with open(os.path.expanduser("~/.github_token")) as f:
+            h = base64.b64encode(f"x-access-token:{f.read().strip()}".encode()).decode()
+        subprocess.run(["git", "-c", f"http.extraHeader=Authorization: Basic {h}", "push", "-q",
+                        "https://github.com/wroko141-spec/hh-panel.git", "main"], cwd=ROOT, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def notify(new):
     """Новые вакансии в Telegram, если заданы HH_TG_TOKEN и HH_TG_CHAT."""
     token, chat = os.environ.get("HH_TG_TOKEN"), os.environ.get("HH_TG_CHAT")
     if not (token and chat and new):
@@ -144,7 +300,7 @@ def notify(new, searches):
     lines = [f"🆕 Новых вакансий: {len(new)}"]
     for v in new[:15]:
         lines.append(f"\n<b>{html.escape(v['name'])}</b> - {html.escape(v['company'])}\n"
-                     f"{v['city']}, {money(v)}\n{v['url']}")
+                     f"{html.escape(v['city'])}, {money(v)}\n{v['url']}")
     if len(new) > 15:
         lines.append(f"\n…и ещё {len(new) - 15} в панели")
     body = urllib.parse.urlencode({"chat_id": chat, "text": "".join(lines), "parse_mode": "HTML",
@@ -156,71 +312,17 @@ def notify(new, searches):
 
 
 def main():
-    with open(os.path.join(ROOT, "searches.json"), encoding="utf-8") as f:
-        searches = json.load(f)
-    now = datetime.now(MSK)
-    stamp = now.strftime("%Y-%m-%dT%H:%M")
-    old = {v["id"]: v for v in load("vacancies.json", {}).get("vacancies", [])}
-    first_run = not old
-    history = load("history.json", [])
-    seen, stats, new = {}, {}, []
-
-    for s in searches:
-        log("Поиск:", s["title"])
-        try:
-            items, total = run_search(s)
-        except Exception as e:
-            log("  ошибка:", e)
-            stats[s["id"]] = {"error": str(e)}
-            continue
-        sal = [mid(v) for v in items if mid(v)]
-        stats[s["id"]] = {"total": total, "got": len(items), "median": round(statistics.median(sal)) if sal else None}
-        for v in items:
-            prev = seen.get(v["id"]) or old.get(v["id"])
-            v["searches"] = sorted(set((prev or {}).get("searches", []) if v["id"] in seen else []) | {s["id"]})
-            v["first_seen"] = (prev or {}).get("first_seen", stamp)
-            v["last_seen"] = stamp
-            if v["id"] not in old and v["id"] not in seen:
-                new.append(v)
-            seen[v["id"]] = v
-        time.sleep(random.uniform(3, 6))
-
-    if not any("total" in x for x in stats.values()):
+    searches = saved_searches()
+    first_run = not load("vacancies.json", {}).get("vacancies")
+    results = collect(searches)
+    if not any(isinstance(r, tuple) for r in results.values()):
         log("Ни один поиск не прошёл, данные не трогаю")
         sys.exit(1)
-
-    cutoff = (now - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%dT%H:%M")
-    keep = os.environ.get("HH_FRESH") != "1"   # HH_FRESH=1 - выбросить всё, чего нет в текущей выдаче
-    for vid, v in old.items():           # не нашли сейчас, но видели недавно - оставляем
-        if keep and vid not in seen and v.get("last_seen", "") >= cutoff:
-            if any("error" in stats.get(s, {}) for s in v.get("searches", [])):
-                v["last_seen"] = stamp   # поиск не сработал (капча) - не считаем, что вакансия пропала
-            seen[vid] = v
-    # одна и та же вакансия, размещённая в нескольких городах, -> одна карточка со списком городов
-    groups = {}
-    for v in sorted(seen.values(), key=lambda v: v.get("published", ""), reverse=True):
-        k = (v["name"].strip().lower(), v["company"], v["salary_from"], v["salary_to"])
-        if k in groups:
-            g = groups[k]
-            g["copies"] += 1
-            g["ids"].append(v["id"])
-            if v["city"] not in g["cities"]:
-                g["cities"].append(v["city"])
-            g["searches"] = sorted(set(g["searches"]) | set(v["searches"]))
-            g["first_seen"] = min(g["first_seen"], v["first_seen"])
-            g["last_seen"] = max(g["last_seen"], v["last_seen"])
-        else:
-            v["cities"], v["copies"], v["ids"] = [v["city"]], 1, [v["id"]]
-            groups[k] = v
-    vac = list(groups.values())
-    new = [g for g in vac if g["first_seen"] == stamp]   # без дублей
-    save("vacancies.json", {"updated": stamp, "searches": searches, "stats": stats, "vacancies": vac})
-    history.append({"t": stamp, **{k: {"total": x.get("total"), "median": x.get("median")}
-                                   for k, x in stats.items() if "total" in x}})
-    save("history.json", history[-500:])
-    log(f"Готово: всего {len(vac)}, новых {len(new)}")
+    new = merge(results, searches, fresh=os.environ.get("HH_FRESH") == "1")
     if not first_run:
-        notify(new, searches)
+        notify(new)
+    if "--publish" in sys.argv:
+        publish(f"Данные {now_stamp().replace('T', ' ')}")
 
 
 if __name__ == "__main__":

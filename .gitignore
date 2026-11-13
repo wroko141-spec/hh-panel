@@ -1,0 +1,4 @@
+ПАРОЛЬ.txt
+__pycache__/
+*.tmp
+data/.lock

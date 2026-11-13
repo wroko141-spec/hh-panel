@@ -139,6 +139,33 @@ main.wrap{padding-top:24px;padding-bottom:80px}
 .how b{color:var(--text)}
 .how code{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:var(--text)}
 
+/* сбор */
+.run{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:10px;align-items:start}
+@media (max-width:860px){.run{grid-template-columns:1fr}}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.grid2 select.inp{cursor:pointer}
+select.inp option{background:#14151d}
+.chk2{display:flex!important;align-items:center;gap:8px;color:var(--mute);font-size:13px;cursor:pointer;margin-top:12px!important}
+.chk2 input{accent-color:var(--accent)}
+.ac{position:relative}
+.acl{position:absolute;z-index:5;left:0;right:0;top:calc(100% + 4px);background:#171822;border:1px solid var(--line2);border-radius:12px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,.5)}
+.acl:empty{display:none}
+.acl button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;padding:9px 12px;cursor:pointer;font-size:14px}
+.acl button span{color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acl button:hover,.acl button.on{background:var(--panel2)}
+.hint2{color:var(--faint);font-size:12px;margin-top:6px}
+.hint2 code{background:var(--panel2);border-radius:5px;padding:0 5px;color:var(--text)}
+.rgo{margin-top:18px;width:100%;justify-content:center;height:46px;font-size:15px}
+.rgo:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.off{border:1px dashed rgba(255,122,107,.4);color:var(--mute);border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:6px}
+.prog{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:14px 0 10px}
+.prog i{display:block;height:100%;width:0;background:var(--accent);border-radius:99px;transition:width .4s;box-shadow:0 0 14px rgba(200,255,77,.45)}
+.pst{font-size:14px;color:var(--mute)}.pst b{color:var(--text)}
+.perr{color:var(--bad);font-size:14px;margin-top:10px}
+.sc .kind{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.sc .del{margin-left:auto;background:none;border:1px solid var(--line);border-radius:9px;color:var(--mute);width:38px;cursor:pointer}
+.sc .del:hover{color:var(--bad);border-color:rgba(255,122,107,.5)}
+
 /* профиль */
 .prof{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:10px}
 .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px}
@@ -189,6 +216,7 @@ dialog::backdrop{background:rgba(3,4,8,.7);backdrop-filter:blur(4px)}
       <button data-v="list" class="on">Вакансии<span class="cnt" id="cntAll"></span></button>
       <button data-v="stats">Аналитика</button>
       <button data-v="searches">Подборки</button>
+      <button data-v="run">Сбор</button>
       <button data-v="profile">Профиль</button>
     </nav>
   </div>
@@ -238,7 +266,41 @@ dialog::backdrop{background:rgba(3,4,8,.7);backdrop-filter:blur(4px)}
   <section class="view" id="v-searches">
     <div class="srch" id="srch"></div>
     <div class="how">
-      <b>Как это обновляется.</b> На сервере раз в 6 часов запускается сборщик <code>collector.py</code>: он открывает поиск hh.ru по каждой подборке, забирает вакансии и выкладывает их сюда. Подборки меняются в файле <code>searches.json</code>. Новые вакансии сборщик может присылать в Telegram.
+      <b>Как это обновляется.</b> Сохранённые подборки сервер пересобирает раз в 6 часов. Разовые сборы из вкладки «Сбор» не обновляются и исчезают через 14 дней. Новую подборку можно создать во вкладке «Сбор».
+    </div>
+  </section>
+
+  <!-- СБОР -->
+  <section class="view" id="v-run">
+    <div class="run">
+      <div class="box">
+        <h3>Новый сбор</h3>
+        <p class="sub">Сервер откроет поиск hh.ru с этими условиями и заберёт вакансии. Одна страница - до 50 вакансий и около 5 секунд.</p>
+        <div id="rOff" class="off" hidden>Сервер сбора сейчас недоступен. Панель показывает последнюю сохранённую копию данных.</div>
+        <label for="rText">Слова в названии вакансии</label>
+        <input class="inp" id="rText" placeholder="python, frontend, верстальщик…" maxlength="200">
+        <p class="hint2">Несколько вариантов - через OR: <code>python OR django</code>. Фразу - в кавычках: <code>"веб разработчик"</code>.</p>
+        <label class="chk2"><input type="checkbox" id="rAll">искать слова и в описании (вакансий больше, но и мусора больше)</label>
+        <label for="rCity">Город или регион</label>
+        <div class="ac"><input class="inp" id="rCity" placeholder="Начните вводить: Казань" autocomplete="off" role="combobox" aria-expanded="false"><div class="acl" id="rCityList" role="listbox"></div></div>
+        <div class="grid2">
+          <div><label for="rExp">Опыт</label><select class="inp" id="rExp"><option value="">Любой</option><option value="noExperience">Без опыта</option><option value="between1And3">1–3 года</option><option value="between3And6">3–6 лет</option><option value="moreThan6">6+ лет</option></select></div>
+          <div><label for="rFmt">Формат</label><select class="inp" id="rFmt"><option value="">Любой</option><option value="REMOTE">Удалёнка</option><option value="HYBRID">Гибрид</option><option value="ON_SITE">Офис</option></select></div>
+          <div><label for="rSal">Зарплата от, ₽</label><input class="inp" id="rSal" inputmode="numeric" placeholder="не важно"></div>
+          <div><label for="rPages">Сколько собрать</label><select class="inp" id="rPages"><option value="1">до 50 вакансий</option><option value="2" selected>до 100</option><option value="4">до 200</option><option value="6">до 300</option><option value="10">до 500</option></select></div>
+        </div>
+        <label class="chk2"><input type="checkbox" id="rOnlySal">только с указанной зарплатой</label>
+        <label class="chk2"><input type="checkbox" id="rSave">сохранить как подборку и обновлять каждые 6 часов</label>
+        <input class="inp" id="rTitle" placeholder="Название подборки (необязательно)" maxlength="80" hidden style="margin-top:8px">
+        <label for="rPass">Пароль</label>
+        <input class="inp" id="rPass" type="password" autocomplete="current-password" placeholder="Нужен только для запуска">
+        <button class="btn acc rgo" id="rGo">Запустить сбор</button>
+      </div>
+      <div class="box" id="rBox">
+        <h3>Ход сбора</h3>
+        <p class="sub">Здесь будет видно, сколько уже собрано.</p>
+        <div id="rState"><p class="pst">Задайте условия и нажмите «Запустить сбор».</p></div>
+      </div>
     </div>
   </section>
 
@@ -450,22 +512,34 @@ function renderStats() {
 
 /* ---------- подборки ---------- */
 const AREAS = { 1: 'Москва', 2: 'Санкт-Петербург', 88: 'Казань', 113: 'вся Россия' };
+const FMTN = { REMOTE: 'удалёнка', HYBRID: 'гибрид', ON_SITE: 'офис' };
 const EXPN = { noExperience: 'без опыта', between1And3: '1–3 года', between3And6: '3–6 лет', moreThan6: '6+ лет' };
 function renderSearches() {
   $('#srch').innerHTML = DB.searches.map(s => {
     const x = DB.stats[s.id] || {}, mine = DB.vacancies.filter(v => v.searches.includes(s.id));
     const q = new URLSearchParams({ text: s.text, area: s.area || 113, search_field: s.search_field || 'name' });
-    if (s.experience) q.set('experience', s.experience); if (s.work_format) q.set('work_format', s.work_format);
+    if (s.search_field === 'everywhere') q.delete('search_field');
+    ['experience', 'work_format', 'salary', 'only_with_salary'].forEach(k => s[k] && q.set(k, s[k]));
     const tr = HIST.filter(h => h[s.id]).map(h => h[s.id].total);
     const delta = tr.length > 1 ? tr[tr.length - 1] - tr[tr.length - 2] : null;
-    return `<div class="sc"><h3>${esc(s.title)}</h3>
-      <div class="ps"><span class="tag">«${esc(s.text)}»</span><span class="tag">${AREAS[s.area] || 'регион ' + s.area}</span>${s.experience ? `<span class="tag">${EXPN[s.experience]}</span>` : ''}${s.work_format === 'REMOTE' ? '<span class="tag">удалёнка</span>' : ''}</div>
+    const once = String(s.id).startsWith('r-');
+    return `<div class="sc"><div style="display:flex;gap:10px;align-items:flex-start"><div><div class="kind">${once ? 'разовый сбор' : 'обновляется каждые 6 ч'}${x.t ? ' · ' + ago(x.t) : ''}</div><h3>${esc(s.title)}</h3></div>${API_OK ? `<button class="del" data-del="${esc(s.id)}" title="Удалить подборку" aria-label="Удалить подборку">✕</button>` : ''}</div>
+      <div class="ps"><span class="tag">«${esc(s.text)}»</span><span class="tag">${esc(s.area_name || AREAS[s.area] || 'регион ' + s.area)}</span>${s.experience ? `<span class="tag">${EXPN[s.experience]}</span>` : ''}${s.work_format ? `<span class="tag">${FMTN[s.work_format] || esc(s.work_format)}</span>` : ''}${s.salary ? `<span class="tag">от ${fmt(s.salary)} ₽</span>` : ''}${s.search_field === 'everywhere' ? '<span class="tag">и в описании</span>' : ''}</div>
       ${x.error ? `<p class="err">Последний сбор не удался: ${esc(x.error)}</p>` : ''}
       <div class="nums"><div><small>на hh.ru</small><b>${fmt(x.total)}</b>${delta ? ` <small>${delta > 0 ? '+' : ''}${delta} с прошлого</small>` : ''}</div><div><small>в панели</small><b>${mine.length}</b></div><div><small>медиана</small><b>${kfmt(x.median)}</b></div></div>
       <div class="row"><button class="btn" data-open="${esc(s.id)}">Показать вакансии</button><a class="btn" href="https://hh.ru/search/vacancy?${q}" target="_blank" rel="noopener">На hh.ru</a></div></div>`;
   }).join('');
 }
-$('#srch').addEventListener('click', e => {
+$('#srch').addEventListener('click', async e => {
+  const d = e.target.closest('[data-del]');
+  if (d) {
+    const s = DB.searches.find(x => x.id === d.dataset.del);
+    if (!confirm(`Удалить подборку «${s.title}»? Вакансии, которые есть только в ней, тоже уберутся.`)) return;
+    const r = await api('/api/search/delete', { id: s.id });
+    if (r.error) return toast(r.error);
+    await loadData(); renderSearches(); toast('Подборка удалена');
+    return;
+  }
   const b = e.target.closest('[data-open]'); if (!b) return;
   st.search = $('#fSearch').value = b.dataset.open; go('list');
 });
@@ -567,7 +641,7 @@ $('#reset').onclick = () => {
 function go(v) {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
-  ({ list: renderList, stats: renderStats, searches: renderSearches, profile: renderProfile })[v]();
+  ({ list: renderList, stats: renderStats, searches: renderSearches, profile: renderProfile, run: () => {} })[v]();
   store.set('tab', v); scrollTo({ top: 0 });
 }
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) go(b.dataset.v); });
@@ -575,19 +649,115 @@ $('#tabs').addEventListener('click', e => { const b = e.target.closest('button')
 let tT;
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(tT); tT = setTimeout(() => el.classList.remove('on'), 2200); }
 
+/* ---------- сервер сбора ---------- */
+const API = location.hostname === 'localhost' ? 'http://localhost:8790' : 'https://radelya-vps.tail41d314.ts.net';
+let API_OK = false;
+const getJSON = (url, ms = 5000) => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+async function api(path, body) {
+  try {
+    const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pass': encodeURIComponent($('#rPass').value || store.get('pass', '')) }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(15000) });
+    const j = await r.json().catch(() => ({ error: 'Сервер ответил с ошибкой ' + r.status }));
+    if (r.status === 403) store.set('pass', '');
+    else if (r.ok && $('#rPass').value) store.set('pass', $('#rPass').value);
+    return r.ok ? j : { error: j.error || 'Ошибка ' + r.status };
+  } catch { return { error: 'Сервер сбора недоступен' }; }
+}
+
+// живые данные с сервера; если он недоступен - копия с GitHub Pages
+async function loadData() {
+  let d, h;
+  try { [d, h] = await Promise.all([getJSON(API + '/api/data'), getJSON(API + '/api/history').catch(() => [])]); API_OK = true; }
+  catch { API_OK = false; [d, h] = await Promise.all([getJSON('data/vacancies.json'), getJSON('data/history.json').catch(() => [])]); }
+  DB = d; HIST = h; DB.firstRun = HIST[0]?.t; now = Date.now();
+  const u = new Date(DB.updated + ':00+03:00');
+  $('#upd').innerHTML = `<span class="dot"${API_OK ? '' : ' style="background:var(--faint);box-shadow:none"'}></span>обновлено <b>${u.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })}</b> МСК<span class="long"><br>${API_OK ? 'сервер на связи' : 'сохранённая копия'}</span>`;
+  const cur = st.search;
+  $('#fSearch').innerHTML = '<option value="">Все подборки</option>' + DB.searches.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join('');
+  st.search = DB.searches.some(s => s.id === cur) ? cur : ''; $('#fSearch').value = st.search;
+  $('#rOff').hidden = API_OK; $('#rGo').disabled = !API_OK;
+}
+
+/* ---------- сбор ---------- */
+let area = store.get('area', { id: 113, name: 'Вся Россия' }), acT, acI = -1;
+$('#rCity').value = area.name;
+$('#rPass').value = store.get('pass', '');
+function pickArea(a) { area = { id: a[0], name: a[1] }; $('#rCity').value = a[1]; $('#rCityList').innerHTML = ''; $('#rCity').setAttribute('aria-expanded', 'false'); }
+$('#rCity').addEventListener('input', e => {
+  clearTimeout(acT); acI = -1;
+  const q = e.target.value.trim();
+  acT = setTimeout(async () => {
+    if (q.length < 2) { $('#rCityList').innerHTML = ''; return; }
+    let list = [];
+    try { list = await getJSON(API + '/api/areas?q=' + encodeURIComponent(q), 4000); } catch {}
+    if ($('#rCity').value.trim() !== q) return;          // пока ждали ответ, ввод уже изменился
+    $('#rCityList').innerHTML = list.map((a, i) => `<button type="button" role="option" data-i="${i}" data-a='${esc(JSON.stringify(a))}'>${esc(a[1])}<span>${esc(a[2] === 'регион' ? 'регион целиком' : a[2])}</span></button>`).join('')
+      || `<button type="button" disabled>Не нашлось. Проверьте название</button>`;
+    $('#rCity').setAttribute('aria-expanded', 'true');
+  }, 200);
+});
+$('#rCityList').addEventListener('mousedown', e => { const b = e.target.closest('button[data-a]'); if (b) { e.preventDefault(); pickArea(JSON.parse(b.dataset.a)); } });
+$('#rCity').addEventListener('keydown', e => {
+  const bs = $$('#rCityList button[data-a]'); if (!bs.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); acI = (acI + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length; bs.forEach((b, i) => b.classList.toggle('on', i === acI)); }
+  if (e.key === 'Enter') { e.preventDefault(); pickArea(JSON.parse(bs[Math.max(acI, 0)].dataset.a)); }
+  if (e.key === 'Escape') $('#rCityList').innerHTML = '';
+});
+$('#rCity').addEventListener('blur', () => setTimeout(() => { $('#rCityList').innerHTML = ''; if ($('#rCity').value.trim() !== area.name) $('#rCity').value = area.name; }, 150));
+$('#rSave').addEventListener('change', e => $('#rTitle').hidden = !e.target.checked);
+$('#rSal').addEventListener('change', e => { const n = parseSal(e.target.value); e.target.value = n ? fmt(n) : ''; });
+
+let polling = null;
+function showJob(j) {
+  const pct = j.state === 'done' ? 100 : Math.round(j.page / Math.max(j.pages, 1) * 100);
+  const s = j.search || {};
+  $('#rState').innerHTML = `<p class="pst"><b>${esc(s.title || '')}</b></p>
+    <div class="prog"><i style="width:${pct}%"></i></div>
+    <p class="pst">${j.state === 'done' ? `<b>Готово.</b> Собрано ${j.found} из ${fmt(j.total)} на hh.ru.`
+      : j.state === 'error' ? 'Сбор остановился.'
+      : `Страница <b>${j.page}</b> из ${j.pages} · собрано <b>${j.found}</b>${j.total != null ? ` · всего на hh: ${fmt(j.total)}` : ''}`}</p>
+    ${j.state === 'error' ? `<p class="perr">${esc(j.error || 'Неизвестная ошибка')}</p>` : ''}
+    ${j.state === 'done' ? (j.found ? `<button class="btn acc" style="margin-top:14px" data-show="${esc(s.id)}">Показать вакансии</button>` : '<p class="pst" style="margin-top:8px">По этим условиям на hh.ru вакансий нет. Попробуйте ослабить условия или искать и в описании.</p>') : ''}`;
+}
+$('#rState').addEventListener('click', e => {
+  const b = e.target.closest('[data-show]'); if (!b) return;
+  Object.assign(st, { q: '', exp: '', fmt: '', sal: 0, hasSal: false, onlyNew: false, status: '', limit: 40, search: b.dataset.show });
+  ['#q', '#fExp', '#fFmt', '#fSal'].forEach(s => $(s).value = ''); $('#fHasSal').checked = $('#fNew').checked = false; $('#salHint').textContent = '';
+  $$('#fStatus button').forEach(x => x.classList.toggle('on', x.dataset.s === ''));
+  $('#fSearch').value = st.search; go('list');
+});
+$('#rGo').onclick = async () => {
+  const text = $('#rText').value.trim();
+  if (!text) { $('#rText').focus(); return toast('Напишите, что искать'); }
+  if (!$('#rPass').value) { $('#rPass').focus(); return toast('Введите пароль'); }
+  $('#rGo').disabled = true;
+  const j = await api('/api/run', {
+    text, area: area.id, experience: $('#rExp').value, work_format: $('#rFmt').value, salary: parseSal($('#rSal').value),
+    pages: +$('#rPages').value, only_with_salary: $('#rOnlySal').checked, search_field: $('#rAll').checked ? 'everywhere' : 'name',
+    save: $('#rSave').checked, title: $('#rSave').checked ? $('#rTitle').value.trim() : '',
+  });
+  if (j.error) { $('#rGo').disabled = !API_OK; $('#rState').innerHTML = `<p class="perr">${esc(j.error)}</p>`; return; }
+  store.set('area', area);
+  showJob(j);
+  if (innerWidth < 860) $('#rBox').scrollIntoView({ behavior: 'smooth', block: 'start' });   // на телефоне ход сбора под формой
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    let s; try { s = await getJSON(`${API}/api/job/${j.id}`, 5000); } catch { return; }
+    showJob(s);
+    if (s.state === 'done' || s.state === 'error') {
+      clearInterval(polling); $('#rGo').disabled = false;
+      if (s.state === 'done') { await loadData(); toast('Сбор закончен'); }
+    }
+  }, 1200);
+};
+
 /* ---------- загрузка ---------- */
 (async () => {
-  try {
-    const [d, h] = await Promise.all([fetch('data/vacancies.json', { cache: 'no-cache' }).then(r => r.json()), fetch('data/history.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => [])]);
-    DB = d; HIST = h; DB.firstRun = HIST[0]?.t; now = Date.now();
-  } catch {
+  try { await loadData(); }
+  catch {
     $('#upd').textContent = 'не удалось загрузить данные';
-    $('#list').innerHTML = '<div class="empty">Данных пока нет. Их кладёт сюда сборщик collector.py.</div>';
+    $('#list').innerHTML = '<div class="empty">Не удалось загрузить данные. Обновите страницу.</div>';
     return;
   }
-  const u = new Date(DB.updated + ':00+03:00');
-  $('#upd').innerHTML = `<span class="dot"></span>обновлено <b>${u.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })}</b> МСК<span class="long"><br>сбор каждые 6 часов</span>`;
-  $('#fSearch').insertAdjacentHTML('beforeend', DB.searches.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(''));
   go(store.get('tab', 'list'));
 })();
 </script>
