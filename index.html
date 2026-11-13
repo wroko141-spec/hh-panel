@@ -652,10 +652,12 @@ function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add
 /* ---------- сервер сбора ---------- */
 const API = location.hostname === 'localhost' ? 'http://localhost:8790' : 'https://radelya-vps.tail41d314.ts.net';
 let API_OK = false;
-const getJSON = (url, ms = 5000) => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+// обрыв соединения (не ответ сервера) повторяем: один из входных узлов Funnel иногда сбрасывает TLS
+async function retry(fn, n = 3) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= n - 1 || e.http) throw e; await new Promise(r => setTimeout(r, 400 * (i + 1))); } } }
+const getJSON = (url, ms = 5000) => retry(() => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(r => { if (!r.ok) throw Object.assign(new Error(r.status), { http: true }); return r.json(); }));
 async function api(path, body) {
   try {
-    const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pass': encodeURIComponent($('#rPass').value || store.get('pass', '')) }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(15000) });
+    const r = await retry(() => fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pass': encodeURIComponent($('#rPass').value || store.get('pass', '')) }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(15000) }));
     const j = await r.json().catch(() => ({ error: 'Сервер ответил с ошибкой ' + r.status }));
     if (r.status === 403) store.set('pass', '');
     else if (r.ok && $('#rPass').value) store.set('pass', $('#rPass').value);
