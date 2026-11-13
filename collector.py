@@ -64,10 +64,69 @@ def first(lst, key):
         return []
 
 
+# плюсы и предупреждения из условий/требований: (текст значка, регулярка)
+PERKS = [
+    ("стажировка", r"стажир|стаж[её]р|\bintern\b|internship|trainee"), ("обучение", r"обучени|обучим|научим|наставни|ментор"),
+    ("можно без опыта", r"без опыта|опыт не (важен|требуется|обязателен|нужен)|не так важен опыт|с нуля"),
+    ("можно с учёбой", r"совмещ\w* с уч[её]б|для студентов|студент"),
+    ("официально", r"официальн|тк рф|трудов\w* кодекс"), ("ГПХ / самозанятость", r"гпх|самозанят"),
+    ("гибкий график", r"гибк\w* график|свободн\w* график|гибкий старт"), ("частичная занятость", r"частичн|part-time|подработ"),
+    ("сдельная оплата", r"сдельн|по результатам|за результат"), ("премии", r"преми|бонус"), ("ДМС", r"\bдмс\b"),
+    ("продажи", r"продаж|продава"), ("звонки", r"звонк|колл-центр|call"),
+]
+HEADS = r"^(что (нужно|предстоит|будешь|будет)[^:—-]*[:—-]?|ваш[аи]? (задач[аи]|обязанности)\s*[:—-]?|задачи\s*[:—-]?|обязанности\s*[:—-]?|чем (предстоит|будешь) заниматься\s*[:—-]?|мы ищем[^:—-]*[:—-]?)\s*"
+
+
+def summarize(name, req, resp, cond):
+    """Короткая выжимка без нейросети: главная задача (до 12 слов) + значки-плюсы.
+    Из первых фраз обязанностей (потом требований) берём ту, что больше похожа на описание работы."""
+    def sentences(t):
+        t = re.sub(r"\s+", " ", t or "").strip()
+        return [x.strip(" -—–•;") for x in re.split(r"(?<=[.!?…;])\s+|\s+[-—–•]\s+", t) if x.strip(" -—–•;")]
+    def score(x, i, src):
+        w = x.split()
+        if len(w) < 3 or x.endswith(":") or re.search(r"(нужно|ты|тебя|вас)[.:]?$", x, re.I):
+            return None
+        if re.match(r"(мы|наш[аеи]?|компания|у нас|не начинаешь|ищем|приглашаем|в связи с|и|а|для|будет|можешь|если)\b", x, re.I) \
+                or re.search(r"плюсом|приветствуется|преимуществ", x, re.I) or x.endswith(("!", "?")) \
+                or (x.upper() == x and re.search(r"[А-ЯA-Z]{4}", x)):
+            return None                                   # про компанию, обрывок, «будет плюсом», реклама, ЗАГОЛОВОК
+        if src is resp and re.match(r"(желание|знание|умение|понимание|опыт|навык|ответственност|наличие|готовност|внимательност|грамотн)", x, re.I):
+            return None                                   # это требование, а не задача
+        sc = 0
+        if re.match(r"\w+(ть|ться|ти|ние|ание|ение|ка|ция|ботка|дение)\b", x, re.I):
+            sc += 3                                       # «Разрабатывать…», «Разработка…», «Ведение…»
+        if 4 <= len(w) <= 16:
+            sc += 1
+        if i == 0 and src.lstrip().startswith(("...", "…")):
+            sc -= 2                                       # обрывок с начала текста
+        return sc - i * 0.5                               # при прочих равных - что раньше
+    best, kind = "", "task"
+    for kind, src in (("task", resp), ("req", req)):   # сначала обязанности; требования - только если там пусто
+        cands = []
+        for i, x in enumerate(sentences(src)[:5]):
+            x = re.sub(HEADS, "", x, flags=re.I).strip(" -—–:")
+            sc = score(x, i, src)
+            if sc is not None:
+                cands.append((sc, -i, x))
+        if cands:
+            best = max(cands)[2]
+            break
+    words = best.split()
+    task = (" ".join(words[:12]).rstrip(",;:—-. ") + ("…" if len(words) > 12 else "")).rstrip(".")
+    text = f"{name} {req} {resp} {cond}".lower()
+    perks = [p for p, rx in PERKS if re.search(rx, text)]
+    if "можно без опыта" in perks and "стажировка" in perks:
+        perks.remove("можно без опыта")              # стажировка и так значит «без опыта»
+    task = (task[:1].upper() + task[1:]) if task else ""
+    return (("Нужно: " + task[:1].lower() + task[1:]) if kind == "req" and task else task), perks[:4]
+
+
 def normalize(v):
     c = v.get("compensation") or {}
     sn = v.get("snippet") or {}
-    req, resp = clean(sn.get("req")), clean(sn.get("resp"))
+    req, resp, cond = clean(sn.get("req")), clean(sn.get("resp")), clean(sn.get("cond"))
+    task, perks = summarize(v.get("name", ""), req, resp, cond)
     text = f"{v.get('name', '')} {req} {resp}".lower()
     sal_from, sal_to = c.get("perModeFrom") or c.get("from"), c.get("perModeTo") or c.get("to")
     return {
@@ -84,7 +143,9 @@ def normalize(v):
         "formats": [FMT.get(f, f) for f in first(v.get("workFormats"), "workFormatsElement")],
         "published": (v.get("publicationTime") or {}).get("$", "")[:16],
         "url": f"https://hh.ru/vacancy/{v['vacancyId']}",
-        "req": req, "resp": resp,
+        "req": req, "resp": resp, "cond": cond,
+        "task": task, "perks": perks,                      # выжимка: что делать + плюсы
+        "hh_skills": [x.strip() for x in clean(sn.get("skill")).rstrip(".…").split(",") if x.strip()][:10],
         "skills": [s for s, rx in SKILLS.items() if re.search(rx, text)],
         "responses": v.get("totalResponsesCount"),
     }

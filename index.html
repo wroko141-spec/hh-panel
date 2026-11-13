@@ -85,6 +85,17 @@ main.wrap{padding-top:24px;padding-bottom:80px}
 .tag{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--mute)}
 .tag.sk{color:var(--text)}
 .tag.my{border-color:rgba(200,255,77,.45);color:var(--accent)}
+.task{grid-column:1/-1;font-size:14.5px;margin-top:8px;color:var(--text)}
+.perks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.perk{font-size:12px;border-radius:999px;padding:3px 10px;color:var(--accent);border:1px solid rgba(200,255,77,.35);background:rgba(200,255,77,.06)}
+.perk.warn{color:#ffb35c;border-color:rgba(255,179,92,.4);background:rgba(255,179,92,.06)}
+.full{grid-column:1/-1;margin-top:8px;font-size:13.5px;color:var(--mute)}
+.full summary{cursor:pointer;color:var(--faint);font-size:13px;width:max-content;list-style:none}
+.full summary::-webkit-details-marker{display:none}
+.full summary::after{content:" ▾"}.full[open] summary::after{content:" ▴"}
+.full summary:hover{color:var(--text)}
+.full p{margin-top:8px}.full b{color:var(--text);font-weight:600}
+.full .cut{font-size:12px;color:var(--faint)}.full .cut a{text-decoration:underline}
 .req{grid-column:1/-1;color:var(--mute);font-size:13.5px;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .acts{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
 .ib{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:none;color:var(--mute);font-size:13px;cursor:pointer;transition:.2s}
@@ -356,6 +367,7 @@ const ICON = {
 let DB = { vacancies: [], searches: [], stats: {} }, HIST = [];
 let marks = store.get('marks', {});          // id -> 'fav' | 'done' | 'hide'
 let prof = store.get('profile', { skills: [], name: '', about: '', contact: '' });
+const WARN = new Set(['продажи', 'звонки']);
 const markOf = v => { for (const id of v.ids || [v.id]) if (marks[id]) return marks[id]; return undefined; };
 let st = { q: '', search: '', exp: '', fmt: '', sal: 0, hasSal: false, onlyNew: false, status: '', sort: 'date', limit: 40 };
 let now = Date.now();
@@ -384,7 +396,8 @@ function ago(s) {
 }
 
 function filtered(ignoreStatus) {
-  const q = st.q.trim().toLowerCase();
+  // каждое слово запроса должно совпасть с началом какого-то слова: «уфа» найдёт Уфу, но не «мануфактуру»
+  const qre = st.q.trim().toLowerCase().split(/\s+/).filter(Boolean).map(w => new RegExp('(^|[^\\p{L}\\p{N}])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'iu'));
   return DB.vacancies.filter(v => {
     const mk = markOf(v);
     if (!ignoreStatus) {
@@ -396,7 +409,7 @@ function filtered(ignoreStatus) {
     if (st.hasSal && !(v.salary_from || v.salary_to)) return false;
     if (st.sal && !(monthly(v) && (v.salary_from || v.salary_to) >= st.sal)) return false;   // нижняя граница вилки
     if (st.onlyNew && !isNew(v)) return false;
-    if (q && !(v.name + ' ' + v.company + ' ' + (v.cities || [v.city]).join(' ') + ' ' + v.skills.join(' ') + ' ' + v.req + ' ' + v.resp).toLowerCase().includes(q)) return false;
+    if (qre.length && !qre.every(r => r.test(v.name + ' ' + v.company + ' ' + (v.cities || [v.city]).join(' ') + ' ' + v.skills.join(' ') + ' ' + v.req + ' ' + v.resp + ' ' + (v.cond || '') + ' ' + (v.task || '') + ' ' + (v.perks || []).join(' ')))) return false;
     return true;
   });
 }
@@ -432,7 +445,12 @@ function renderList() {
       </div>
       <div><div class="sal${s ? '' : ' none'}">${s ? esc(s) : 'з/п не указана'}</div><div class="when">${salNote(v) ? salNote(v) + ' · ' : ''}${ago(v.published)}${v.responses != null ? ` · <span title="Число из данных hh.ru, на сайте его не показывают, оно примерное">~${fmt(v.responses)} откликов</span>` : ''}</div></div>
       <div class="info"><span class="tag">опыт: ${esc(v.experience || '–')}</span>${fmtTags}${sk}</div>
-      ${v.req ? `<p class="req">${esc(v.req)}</p>` : ''}
+      ${v.task ? `<p class="task">${esc(v.task)}</p>` : v.req ? `<p class="req">${esc(v.req)}</p>` : ''}
+      ${v.perks && v.perks.length ? `<div class="perks">${v.perks.map(p => `<span class="perk${WARN.has(p) ? ' warn' : ''}">${esc(p)}</span>`).join('')}</div>` : ''}
+      ${v.resp || v.req || v.cond ? `<details class="full"><summary>подробнее</summary>
+        ${v.resp ? `<p><b>Задачи.</b> ${esc(v.resp)}</p>` : ''}${v.req ? `<p><b>Требования.</b> ${esc(v.req)}</p>` : ''}${v.cond ? `<p><b>Условия.</b> ${esc(v.cond)}</p>` : ''}
+        ${v.hh_skills && v.hh_skills.length ? `<p><b>Навыки по версии работодателя.</b> ${esc(v.hh_skills.join(', '))}</p>` : ''}
+        <p class="cut">Это короткий фрагмент, который hh показывает в поиске. Полное описание - на <a href="${esc(v.url)}" target="_blank" rel="noopener">hh.ru</a>.</p></details>` : ''}
       <div class="acts">
         <button class="ib fv${mk === 'fav' ? ' on' : ''}" data-a="fav">${ICON.fav}${mk === 'fav' ? 'В избранном' : 'В избранное'}</button>
         <button class="ib${mk === 'done' ? ' on' : ''}" data-a="done">${ICON.done}Откликнулся</button>
@@ -600,12 +618,12 @@ $('#xlsx').onclick = async () => {
   if (!window.XLSX) { toast('Загружаю модуль Excel…'); await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = no; document.head.append(s); }).catch(() => toast('Не удалось загрузить модуль Excel')); }
   if (!window.XLSX) return;
   const rows = sorted(filtered()).map(v => ({
-    'Вакансия': v.name, 'Компания': v.company, 'Город': (v.cities || [v.city]).join(', '), 'До вычета': v.gross ? 'да' : '', 'З/п от': v.salary_from, 'З/п до': v.salary_to, 'Валюта': v.currency, 'Период': { MONTH: 'месяц', HOUR: 'час', SHIFT: 'смена', SERVICE: 'за услугу', YEAR: 'год' }[v.salary_mode] || '',
+    'Вакансия': v.name, 'Кратко': v.task || '', 'Плюсы': (v.perks || []).join(', '), 'Компания': v.company, 'Город': (v.cities || [v.city]).join(', '), 'До вычета': v.gross ? 'да' : '', 'З/п от': v.salary_from, 'З/п до': v.salary_to, 'Валюта': v.currency, 'Период': { MONTH: 'месяц', HOUR: 'час', SHIFT: 'смена', SERVICE: 'за услугу', YEAR: 'год' }[v.salary_mode] || '',
     'Опыт': v.experience, 'Формат': v.formats.join(', '), 'Навыки': v.skills.join(', '), 'Опубликована': (v.published || '').replace('T', ' '),
     'Откликов': v.responses, 'Статус': { fav: 'избранное', done: 'откликнулся', hide: 'скрыта' }[markOf(v)] || '', 'Ссылка': v.url,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [40, 26, 18, 10, 10, 10, 7, 10, 10, 16, 36, 16, 9, 12, 34].map(w => ({ wch: w }));
+  ws['!cols'] = [40, 50, 30, 26, 18, 10, 10, 10, 7, 10, 10, 16, 36, 16, 9, 12, 34].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Вакансии');
   XLSX.writeFile(wb, `vacancies_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
