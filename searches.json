@@ -1,0 +1,6 @@
+[
+  {"id": "py-remote",  "title": "Python, удалённо, без опыта", "text": "python разработчик", "area": 113, "experience": "noExperience", "work_format": "REMOTE", "pages": 2},
+  {"id": "front-remote", "title": "Frontend, удалённо", "text": "frontend", "area": 113, "work_format": "REMOTE", "pages": 2},
+  {"id": "web-kazan",  "title": "Веб-разработчик, Казань", "text": "веб разработчик", "area": 88, "pages": 2},
+  {"id": "py-kazan",   "title": "Python, Казань", "text": "python", "area": 88, "pages": 2}
+]

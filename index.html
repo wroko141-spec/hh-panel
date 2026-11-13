@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HH панель</title>
+<meta name="description" content="Панель вакансий hh.ru: подборки, фильтры, аналитика зарплат и навыков, сопроводительные письма.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06070b;--panel:#0f1016;--panel2:#14151d;--text:#f1ede4;--mute:rgba(241,237,228,.55);--faint:rgba(241,237,228,.32);
+  --line:rgba(241,237,228,.10);--line2:rgba(241,237,228,.18);--accent:#c8ff4d;--moon:#dfe7f7;--bad:#ff7a6b;
+  --r:16px;--pad:clamp(16px,4vw,40px);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{color-scheme:dark}
+body{background:var(--bg);color:var(--text);font:15px/1.5 Manrope,system-ui,sans-serif;min-height:100vh;
+  background-image:radial-gradient(900px 500px at 85% -10%,rgba(120,150,255,.10),transparent 60%),radial-gradient(700px 400px at -10% 10%,rgba(200,255,77,.05),transparent 60%);background-attachment:fixed}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,.uf{font-family:Unbounded,Manrope,sans-serif;letter-spacing:-.02em}
+.wrap{max-width:1240px;margin:0 auto;padding:0 var(--pad)}
+
+/* шапка */
+header{position:sticky;top:0;z-index:20;background:rgba(6,7,11,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:18px;height:64px}
+.logo{display:flex;align-items:center;gap:10px;font:700 16px Unbounded,sans-serif;white-space:nowrap}
+.logo i{width:30px;height:30px;border-radius:9px;background:var(--accent);color:#0a0b0f;display:grid;place-items:center;font:700 12px Unbounded,sans-serif;font-style:normal}
+.upd{color:var(--mute);font-size:12px;margin-left:auto;text-align:right;line-height:1.35}
+.upd b{color:var(--text);font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;box-shadow:0 0 10px var(--accent);vertical-align:1px}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px}
+.tabs button{background:none;border:1px solid transparent;border-radius:999px;padding:7px 14px;color:var(--mute);cursor:pointer;white-space:nowrap;font-size:14px;transition:.2s}
+.tabs button:hover{color:var(--text)}
+.tabs button.on{color:var(--text);border-color:var(--line2);background:var(--panel2)}
+.tabs .cnt{font-size:11px;color:var(--faint);margin-left:4px}
+
+main.wrap{padding-top:24px;padding-bottom:80px}
+.view{display:none}.view.on{display:block}
+
+/* фильтры */
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.field{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:0 12px;height:42px;transition:border-color .2s}
+.field:focus-within{border-color:var(--line2)}
+.field input,.field select{background:none;border:0;outline:0;height:100%;min-width:0}
+.field select{cursor:pointer;padding-right:4px}
+.field select option{background:#14151d}
+.field svg{flex:none;width:16px;height:16px;stroke:var(--mute);fill:none;stroke-width:2}
+.f-search{flex:1 1 260px}.f-search input{width:100%}
+.f-sal input{width:90px}
+.chk{display:flex;align-items:center;gap:8px;height:42px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;user-select:none;font-size:14px;color:var(--mute)}
+.chk input{accent-color:var(--accent)}
+.chk:has(input:checked){color:var(--text);border-color:rgba(200,255,77,.35)}
+.bar2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.found{color:var(--mute);font-size:14px}.found b{color:var(--text)}
+.seg{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px}
+.seg button{white-space:nowrap;background:none;border:0;border-radius:9px;padding:6px 11px;font-size:13px;color:var(--mute);cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 15px;border-radius:11px;border:1px solid var(--line2);background:var(--panel2);cursor:pointer;font-size:14px;transition:.2s;white-space:nowrap}
+.btn:hover{border-color:rgba(205,220,255,.45);box-shadow:0 0 22px rgba(160,190,255,.15)}
+.btn.acc{background:var(--accent);color:#0a0b0f;border-color:var(--accent);font-weight:600}
+.btn.acc:hover{box-shadow:0 0 24px rgba(200,255,77,.35)}
+.ml{margin-left:auto}
+
+/* карточки вакансий */
+.list{display:grid;gap:10px}
+.vac{position:relative;display:grid;grid-template-columns:1fr auto;gap:6px 20px;background:linear-gradient(160deg,#121219,#0c0d12);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;transition:border-color .35s,box-shadow .35s}
+.vac:hover{border-color:rgba(205,220,255,.35);box-shadow:0 0 34px rgba(150,180,255,.08)}
+.vac.fav{border-color:rgba(200,255,77,.35)}
+.vac.done{opacity:.62}
+.vac h3{font-size:16px;line-height:1.3;font-weight:700}
+.vac h3 a:hover{color:var(--moon);text-shadow:0 0 18px rgba(190,210,255,.5)}
+.new{display:inline-block;font:600 10px Manrope;letter-spacing:.08em;text-transform:uppercase;color:#0a0b0f;background:var(--accent);border-radius:6px;padding:2px 6px;margin-left:8px;vertical-align:3px}
+.co{color:var(--mute);font-size:14px;margin-top:3px}
+.co .star{color:#ffd36b}
+.sal{font:600 16px Unbounded,sans-serif;white-space:nowrap;text-align:right}
+.sal.none{font:500 13px Manrope;color:var(--faint)}
+.when{color:var(--faint);font-size:12px;text-align:right;margin-top:4px}
+.info{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--mute)}
+.tag.sk{color:var(--text)}
+.tag.my{border-color:rgba(200,255,77,.45);color:var(--accent)}
+.req{grid-column:1/-1;color:var(--mute);font-size:13.5px;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.acts{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+.ib{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:none;color:var(--mute);font-size:13px;cursor:pointer;transition:.2s}
+.ib:hover{color:var(--text);border-color:var(--line2)}
+.ib svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ib.on{color:var(--accent);border-color:rgba(200,255,77,.4)}
+.ib.on.fv svg{fill:var(--accent)}
+.match{margin-left:auto;font-size:12px;color:var(--mute)}
+.match b{color:var(--text)}
+.empty{text-align:center;color:var(--mute);padding:60px 20px;border:1px dashed var(--line2);border-radius:var(--r)}
+.more{display:flex;justify-content:center;margin-top:16px}
+
+/* аналитика */
+.note{color:var(--mute);font-size:13px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px}
+.kpi small{color:var(--mute);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.kpi div{font:700 28px Unbounded,sans-serif;margin-top:8px}
+.kpi span{color:var(--faint);font-size:12px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:10px}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.chart h3{font-size:14px;margin-bottom:4px}
+.chart p.sub{color:var(--faint);font-size:12px;margin-bottom:16px}
+.hb{display:grid;grid-template-columns:minmax(80px,34%) 1fr auto;align-items:center;gap:10px;font-size:13px;padding:3px 0;border-radius:6px;cursor:default}
+.hb:hover{background:rgba(255,255,255,.03)}
+.hb .lb{color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb .tr{height:14px;position:relative}
+.hb .fl{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:0 4px 4px 0;min-width:2px;opacity:.9;transition:width .5s}
+.hb:hover .fl{opacity:1;box-shadow:0 0 14px rgba(200,255,77,.4)}
+.hb .vl{font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
+.cols{display:flex;align-items:flex-end;gap:4px;height:170px;border-bottom:1px solid var(--line);padding-top:18px}
+.cols .c{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+.cols .c i{width:100%;max-width:26px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;opacity:.9}
+.cols .c:hover i{opacity:1;box-shadow:0 0 14px rgba(200,255,77,.4)}
+.cols .c em{position:absolute;bottom:calc(var(--h) + 4px);font-style:normal;font-size:11px;color:var(--mute)}
+.xl{display:flex;gap:4px;margin-top:6px}.xl span{flex:1;text-align:center;font-size:10px;color:var(--faint)}
+#tip{position:fixed;z-index:50;pointer-events:none;background:#1b1c26;border:1px solid var(--line2);border-radius:10px;padding:8px 11px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .12s;max-width:260px}
+#tip b{display:block;font-size:13px}
+
+/* подборки */
+.srch{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px}
+.sc{background:linear-gradient(160deg,#121219,#0c0d12);border:1px solid var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:10px}
+.sc h3{font-size:15px}
+.sc .ps{display:flex;flex-wrap:wrap;gap:6px}
+.sc .nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.sc .nums div{background:var(--panel2);border-radius:10px;padding:10px}
+.sc .nums small{display:block;color:var(--faint);font-size:11px}
+.sc .nums b{font:600 15px Unbounded,sans-serif}
+.sc .err{color:var(--bad);font-size:13px}
+.sc .row{display:flex;gap:8px;margin-top:auto;padding-top:6px}
+.how{margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;color:var(--mute);font-size:14px}
+.how b{color:var(--text)}
+.how code{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:var(--text)}
+
+/* профиль */
+.prof{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:10px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.box h3{font-size:14px;margin-bottom:4px}
+.box p.sub{color:var(--faint);font-size:12px;margin-bottom:14px}
+.box label{display:block;font-size:12px;color:var(--mute);margin:12px 0 6px}
+.inp{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:0;transition:border-color .2s}
+.inp:focus{border-color:var(--line2)}
+textarea.inp{resize:vertical;min-height:90px;line-height:1.5}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid var(--line);background:none;border-radius:999px;padding:5px 12px;font-size:13px;color:var(--mute);cursor:pointer;transition:.2s}
+.chips button:hover{color:var(--text)}
+.chips button.on{color:#0a0b0f;background:var(--accent);border-color:var(--accent);font-weight:600}
+.saved{color:var(--accent);font-size:12px;opacity:0;transition:opacity .3s;margin-left:8px}
+
+/* окно письма */
+dialog{margin:auto;width:min(680px,calc(100% - 32px));background:#101118;color:var(--text);border:1px solid var(--line2);border-radius:20px;padding:0;box-shadow:0 0 0 1px rgba(205,220,255,.06),0 30px 80px rgba(0,0,0,.6),0 0 80px rgba(140,170,255,.1)}
+dialog::backdrop{background:rgba(3,4,8,.7);backdrop-filter:blur(4px)}
+.dh{display:flex;align-items:flex-start;gap:12px;padding:20px 22px 0}
+.dh h3{font-size:15px;line-height:1.35}
+.dh p{color:var(--mute);font-size:13px;margin-top:3px}
+.x{margin-left:auto;background:none;border:1px solid var(--line);border-radius:9px;width:32px;height:32px;flex:none;cursor:pointer;color:var(--mute)}
+.db{padding:16px 22px}
+.db textarea{min-height:280px}
+.df{display:flex;flex-wrap:wrap;gap:8px;padding:0 22px 20px}
+.hint{color:var(--faint);font-size:12px;margin-top:8px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--accent);color:#0a0b0f;font-weight:600;padding:10px 18px;border-radius:12px;opacity:0;transition:.3s;z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:640px){
+  .upd .long{display:none}
+  .vac{grid-template-columns:1fr;padding:16px}
+  .sal,.when{text-align:left}
+  .f-search{flex-basis:100%}
+  .match{margin-left:0;width:100%}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="logo"><i>hh</i>панель</div>
+      <div class="upd" id="upd">загрузка…</div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-v="list" class="on">Вакансии<span class="cnt" id="cntAll"></span></button>
+      <button data-v="stats">Аналитика</button>
+      <button data-v="searches">Подборки</button>
+      <button data-v="profile">Профиль</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ВАКАНСИИ -->
+  <section class="view on" id="v-list">
+    <div class="filters">
+      <label class="field f-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Название, компания, навык…" autocomplete="off"></label>
+      <label class="field"><select id="fSearch"><option value="">Все подборки</option></select></label>
+      <label class="field"><select id="fExp"><option value="">Любой опыт</option><option>нет</option><option>1–3 года</option><option>3–6 лет</option><option>6+ лет</option></select></label>
+      <label class="field"><select id="fFmt"><option value="">Любой формат</option><option>удалёнка</option><option>гибрид</option><option>офис</option></select></label>
+      <label class="field f-sal">з/п от<input id="fSal" inputmode="numeric" placeholder="0"></label>
+      <label class="chk"><input type="checkbox" id="fHasSal">с зарплатой</label>
+      <label class="chk"><input type="checkbox" id="fNew">новые</label>
+    </div>
+    <div class="bar2">
+      <div class="seg" id="fStatus">
+        <button data-s="" class="on">Все</button><button data-s="fav">Избранное</button><button data-s="done">Откликнулся</button><button data-s="hide">Скрытые</button>
+      </div>
+      <div class="seg" id="fSort">
+        <button data-o="date" class="on">Свежие</button><button data-o="sal">Зарплата</button><button data-o="match">Совпадение</button><button data-o="resp">Меньше откликов</button>
+      </div>
+      <span class="found" id="found"></span>
+      <button class="btn ml" id="xlsx"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></svg>Excel</button>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="more"><button class="btn" id="moreBtn" hidden>Показать ещё</button></div>
+  </section>
+
+  <!-- АНАЛИТИКА -->
+  <section class="view" id="v-stats">
+    <p class="note" id="statsNote"></p>
+    <div class="kpis" id="kpis"></div>
+    <div class="charts">
+      <div class="chart"><h3>Зарплата по опыту</h3><p class="sub">Медиана, ₽ на руки в месяц</p><div id="chExp"></div></div>
+      <div class="chart"><h3>Навыки в требованиях</h3><p class="sub">В скольких вакансиях упоминается</p><div id="chSkills"></div></div>
+      <div class="chart"><h3>Новые вакансии по дням</h3><p class="sub">Дата публикации, последние 14 дней</p><div id="chDays"></div></div>
+      <div class="chart"><h3>Кто больше всех нанимает</h3><p class="sub">Вакансий у компании</p><div id="chCo"></div></div>
+      <div class="chart"><h3>Формат работы</h3><p class="sub">Доля вакансий</p><div id="chFmt"></div></div>
+      <div class="chart"><h3>Разброс зарплат</h3><p class="sub">Сколько вакансий в каждом диапазоне</p><div id="chHist"></div></div>
+    </div>
+  </section>
+
+  <!-- ПОДБОРКИ -->
+  <section class="view" id="v-searches">
+    <div class="srch" id="srch"></div>
+    <div class="how">
+      <b>Как это обновляется.</b> На сервере раз в 6 часов запускается сборщик <code>collector.py</code>: он открывает поиск hh.ru по каждой подборке, забирает вакансии и выкладывает их сюда. Подборки меняются в файле <code>searches.json</code>. Новые вакансии сборщик может присылать в Telegram.
+    </div>
+  </section>
+
+  <!-- ПРОФИЛЬ -->
+  <section class="view" id="v-profile">
+    <div class="prof">
+      <div class="box">
+        <h3>Мои навыки</h3>
+        <p class="sub">По ним считается совпадение с вакансией и пишется сопроводительное.</p>
+        <div class="chips" id="mySkills"></div>
+      </div>
+      <div class="box">
+        <h3>Для сопроводительного письма <span class="saved" id="saved">сохранено</span></h3>
+        <p class="sub">Хранится только в этом браузере.</p>
+        <label for="pName">Имя</label><input class="inp" id="pName" placeholder="Как подписать письмо">
+        <label for="pAbout">Пара слов о себе</label><textarea class="inp" id="pAbout" placeholder="Например: учусь на веб-разработчика, делаю сайты и Telegram-ботов, есть проекты в портфолио."></textarea>
+        <label for="pContact">Контакты и ссылки</label><input class="inp" id="pContact" placeholder="Telegram, портфолио, GitHub">
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="dh"><div><h3 id="dTitle"></h3><p id="dCo"></p></div><button class="x" id="dX" aria-label="Закрыть">✕</button></div>
+  <div class="db"><textarea class="inp" id="dText"></textarea><p class="hint" id="dHint"></p></div>
+  <div class="df">
+    <button class="btn acc" id="dGo">Скопировать и открыть вакансию</button>
+    <button class="btn" id="dCopy">Скопировать</button>
+    <button class="btn" id="dRedo">Другой вариант</button>
+  </div>
+</dialog>
+<div id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => n == null ? '–' : Math.round(n).toLocaleString('ru-RU');
+const kfmt = n => n == null ? '–' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('hhp:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('hhp:' + k, JSON.stringify(v)); } catch {} },
+};
+const ALL_SKILLS = ['Python','Django','FastAPI','Flask','SQL','PostgreSQL','MySQL','Redis','Git','Docker','Linux','REST API','JavaScript','TypeScript','React','Vue','Node.js','HTML/CSS','Figma','PHP','Java','C#','C++','Go','1С','Pandas','ML','LLM','Excel','Telegram','Kubernetes'];
+const ICON = {
+  fav: '<svg viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+  done: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
+  hide: '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2.5 12S6 19 12 19a9.6 9.6 0 0 0 5.4-1.6"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  out: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10 14M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
+};
+
+let DB = { vacancies: [], searches: [], stats: {} }, HIST = [];
+let marks = store.get('marks', {});          // id -> 'fav' | 'done' | 'hide'
+let prof = store.get('profile', { skills: [], name: '', about: '', contact: '' });
+let st = { q: '', search: '', exp: '', fmt: '', sal: 0, hasSal: false, onlyNew: false, status: '', sort: 'date', limit: 40 };
+let now = Date.now();
+
+const salOf = v => v.currency === 'RUR' ? (v.salary_from && v.salary_to ? (v.salary_from + v.salary_to) / 2 : v.salary_from || v.salary_to || null) : null;
+const isNew = v => now - new Date(v.first_seen) < 864e5 && v.first_seen > (DB.firstRun || '');
+const matchOf = v => { if (!prof.skills.length || !v.skills.length) return null; const m = v.skills.filter(s => prof.skills.includes(s)).length; return Math.round(m / v.skills.length * 100); };
+function salText(v) {
+  if (!v.salary_from && !v.salary_to) return null;
+  const cur = { RUR: '₽', USD: '$', EUR: '€', KZT: '₸' }[v.currency] || v.currency || '';
+  if (v.salary_from && v.salary_to) return `${fmt(v.salary_from)}–${fmt(v.salary_to)} ${cur}`;
+  return (v.salary_from ? 'от ' + fmt(v.salary_from) : 'до ' + fmt(v.salary_to)) + ' ' + cur;
+}
+function ago(s) {
+  const m = Math.max(0, (now - new Date(s)) / 6e4);
+  if (m < 60) return Math.round(m) + ' мин назад';
+  if (m < 1440) return Math.round(m / 60) + ' ч назад';
+  const d = Math.round(m / 1440); return d === 1 ? 'вчера' : d + ' дн назад';
+}
+
+function filtered(ignoreStatus) {
+  const q = st.q.trim().toLowerCase();
+  return DB.vacancies.filter(v => {
+    const mk = marks[v.id];
+    if (!ignoreStatus) {
+      if (st.status ? mk !== st.status : mk === 'hide') return false;
+    } else if (mk === 'hide') return false;
+    if (st.search && !v.searches.includes(st.search)) return false;
+    if (st.exp && v.experience !== st.exp) return false;
+    if (st.fmt && !v.formats.includes(st.fmt)) return false;
+    if (st.hasSal && salOf(v) == null) return false;
+    if (st.sal && !((v.salary_to || v.salary_from || 0) >= st.sal && v.currency === 'RUR')) return false;
+    if (st.onlyNew && !isNew(v)) return false;
+    if (q && !(v.name + ' ' + v.company + ' ' + v.skills.join(' ') + ' ' + v.req).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function sorted(a) {
+  const by = {
+    date: (x, y) => (y.published || '').localeCompare(x.published || ''),
+    sal: (x, y) => (salOf(y) ?? -1) - (salOf(x) ?? -1),
+    match: (x, y) => (matchOf(y) ?? -1) - (matchOf(x) ?? -1),
+    resp: (x, y) => (x.responses ?? 1e9) - (y.responses ?? 1e9),
+  }[st.sort];
+  return a.sort(by);
+}
+
+function renderList() {
+  const all = sorted(filtered());
+  $('#found').innerHTML = `Найдено <b>${all.length}</b>`;
+  $('#cntAll').textContent = DB.vacancies.length;
+  const part = all.slice(0, st.limit);
+  $('#moreBtn').hidden = all.length <= st.limit;
+  if (!all.length) {
+    $('#list').innerHTML = `<div class="empty">${st.status ? 'Здесь пока пусто.' : 'Ничего не нашлось. Попробуйте ослабить фильтры.'}</div>`;
+    return;
+  }
+  $('#list').innerHTML = part.map(v => {
+    const mk = marks[v.id], s = salText(v), m = matchOf(v);
+    const fmtTags = v.formats.map(f => `<span class="tag">${esc(f)}</span>`).join('');
+    const sk = v.skills.map(x => `<span class="tag sk${prof.skills.includes(x) ? ' my' : ''}">${esc(x)}</span>`).join('');
+    return `<article class="vac${mk === 'fav' ? ' fav' : ''}${mk === 'done' ? ' done' : ''}" data-id="${v.id}">
+      <div>
+        <h3><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.name)}</a>${isNew(v) ? '<span class="new">новая</span>' : ''}</h3>
+        <div class="co">${esc(v.company)}${v.rating ? ` <span class="star">★</span> ${esc(v.rating)}` : ''} · ${esc(v.city)}</div>
+      </div>
+      <div><div class="sal${s ? '' : ' none'}">${s ? esc(s) : 'з/п не указана'}</div><div class="when">${ago(v.published)}${v.responses != null ? ' · откликов: ' + v.responses : ''}</div></div>
+      <div class="info"><span class="tag">опыт: ${esc(v.experience || '–')}</span>${fmtTags}${sk}</div>
+      ${v.req ? `<p class="req">${esc(v.req)}</p>` : ''}
+      <div class="acts">
+        <button class="ib fv${mk === 'fav' ? ' on' : ''}" data-a="fav">${ICON.fav}${mk === 'fav' ? 'В избранном' : 'В избранное'}</button>
+        <button class="ib${mk === 'done' ? ' on' : ''}" data-a="done">${ICON.done}Откликнулся</button>
+        <button class="ib" data-a="letter">${ICON.mail}Сопроводительное</button>
+        <button class="ib${mk === 'hide' ? ' on' : ''}" data-a="hide">${ICON.hide}${mk === 'hide' ? 'Вернуть' : 'Скрыть'}</button>
+        <a class="ib" href="${esc(v.url)}" target="_blank" rel="noopener">${ICON.out}hh.ru</a>
+        ${m != null ? `<span class="match">совпадение с моими навыками: <b>${m}%</b></span>` : ''}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+$('#list').addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const id = +b.closest('.vac').dataset.id, a = b.dataset.a;
+  if (a === 'letter') return openLetter(DB.vacancies.find(v => v.id === id));
+  marks[id] === a ? delete marks[id] : (marks[id] = a);
+  store.set('marks', marks);
+  renderList();
+  if (a === 'hide' && marks[id]) toast('Скрыто. Вернуть можно во вкладке «Скрытые»');
+});
+
+/* ---------- аналитика ---------- */
+const tip = $('#tip');
+document.addEventListener('pointermove', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.style.opacity = 0; return; }
+  tip.innerHTML = t.dataset.tip; tip.style.opacity = 1;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 10), y = e.clientY + 16 + tip.offsetHeight > innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 16;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+function hbars(el, rows, valFmt, tipFmt) {
+  const max = Math.max(...rows.map(r => r.v), 1);
+  $(el).innerHTML = rows.length ? rows.map(r => `<div class="hb" data-tip="${esc(tipFmt(r))}"><span class="lb">${esc(r.k)}</span><span class="tr"><span class="fl" style="width:${r.v / max * 100}%"></span></span><span class="vl">${valFmt(r.v)}</span></div>`).join('')
+    : '<p class="note">Мало данных</p>';
+}
+function renderStats() {
+  const a = filtered(true);
+  const withSal = a.filter(v => salOf(v) != null);
+  const sals = withSal.map(salOf);
+  const fresh = a.filter(v => now - new Date(v.published) < 864e5).length;
+  const desc = [st.search && DB.searches.find(s => s.id === st.search)?.title, st.exp && 'опыт ' + st.exp, st.fmt, st.q && `«${st.q}»`].filter(Boolean);
+  $('#statsNote').textContent = 'Считается по текущим фильтрам со вкладки «Вакансии»' + (desc.length ? ': ' + desc.join(', ') : ' (сейчас все вакансии)') + '. Скрытые не учитываются.';
+  $('#kpis').innerHTML = [
+    ['Вакансий', fmt(a.length), 'в выборке'],
+    ['Медиана з/п', sals.length ? fmt(median(sals)) + ' ₽' : '–', 'на руки, в месяц'],
+    ['Указана з/п', a.length ? Math.round(withSal.length / a.length * 100) + '%' : '–', `${withSal.length} из ${a.length}`],
+    ['За сутки', fmt(fresh), 'опубликовано'],
+  ].map(([k, v, s]) => `<div class="kpi"><small>${k}</small><div>${v}</div><span>${s}</span></div>`).join('');
+
+  const exps = ['нет', '1–3 года', '3–6 лет', '6+ лет'];
+  hbars('#chExp', exps.map(k => { const x = withSal.filter(v => v.experience === k).map(salOf); return { k: k === 'нет' ? 'без опыта' : k, v: median(x) || 0, n: x.length }; }).filter(r => r.n),
+    v => kfmt(Math.round(v)), r => `<b>Опыт: ${r.k}</b>медиана ${fmt(r.v)} ₽ · вакансий с з/п: ${r.n}`);
+
+  const sk = {}; a.forEach(v => v.skills.forEach(s => sk[s] = (sk[s] || 0) + 1));
+  hbars('#chSkills', Object.entries(sk).sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k, v]) => ({ k, v })),
+    v => v, r => `<b>${r.k}</b>${r.v} вакансий · ${Math.round(r.v / a.length * 100)}%${prof.skills.includes(r.k) ? ' · есть у вас' : ''}`);
+
+  const co = {}; a.forEach(v => co[v.company] = (co[v.company] || 0) + 1);
+  hbars('#chCo', Object.entries(co).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => ({ k, v })), v => v, r => `<b>${r.k}</b>вакансий: ${r.v}`);
+
+  const fm = {}; a.forEach(v => (v.formats.length ? v.formats : ['не указан']).forEach(f => fm[f] = (fm[f] || 0) + 1));
+  hbars('#chFmt', Object.entries(fm).sort((x, y) => y[1] - x[1]).map(([k, v]) => ({ k, v })), v => Math.round(v / a.length * 100) + '%', r => `<b>${r.k}</b>${r.v} вакансий`);
+
+  const days = [...Array(14)].map((_, i) => { const d = new Date(now - (13 - i) * 864e5); return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }); });
+  const cnt = days.map(d => a.filter(v => (v.published || '').startsWith(d)).length), mx = Math.max(...cnt, 1);
+  $('#chDays').innerHTML = `<div class="cols">${days.map((d, i) => `<div class="c" style="--h:${cnt[i] / mx * 100}%" data-tip="<b>${new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</b>опубликовано: ${cnt[i]}"><i style="height:${cnt[i] / mx * 100}%"></i>${cnt[i] && (i === 13 || cnt[i] === mx) ? `<em>${cnt[i]}</em>` : ''}</div>`).join('')}</div>
+    <div class="xl">${days.map((d, i) => `<span>${i % 2 === 1 ? '' : +d.slice(8)}</span>`).join('')}</div>`;
+
+  const bins = [[0, 50e3, 'до 50k'], [50e3, 80e3, '50–80k'], [80e3, 120e3, '80–120k'], [120e3, 180e3, '120–180k'], [180e3, 250e3, '180–250k'], [250e3, 1e12, '250k+']];
+  hbars('#chHist', bins.map(([lo, hi, k]) => ({ k, v: sals.filter(s => s >= lo && s < hi).length })), v => v, r => `<b>${r.k} ₽</b>вакансий: ${r.v}`);
+}
+
+/* ---------- подборки ---------- */
+const AREAS = { 1: 'Москва', 2: 'Санкт-Петербург', 88: 'Казань', 113: 'вся Россия' };
+const EXPN = { noExperience: 'без опыта', between1And3: '1–3 года', between3And6: '3–6 лет', moreThan6: '6+ лет' };
+function renderSearches() {
+  $('#srch').innerHTML = DB.searches.map(s => {
+    const x = DB.stats[s.id] || {}, mine = DB.vacancies.filter(v => v.searches.includes(s.id));
+    const q = new URLSearchParams({ text: s.text, area: s.area || 113 });
+    if (s.experience) q.set('experience', s.experience); if (s.work_format) q.set('work_format', s.work_format);
+    const tr = HIST.filter(h => h[s.id]).map(h => h[s.id].total);
+    const delta = tr.length > 1 ? tr[tr.length - 1] - tr[tr.length - 2] : null;
+    return `<div class="sc"><h3>${esc(s.title)}</h3>
+      <div class="ps"><span class="tag">«${esc(s.text)}»</span><span class="tag">${AREAS[s.area] || 'регион ' + s.area}</span>${s.experience ? `<span class="tag">${EXPN[s.experience]}</span>` : ''}${s.work_format === 'REMOTE' ? '<span class="tag">удалёнка</span>' : ''}</div>
+      ${x.error ? `<p class="err">Последний сбор не удался: ${esc(x.error)}</p>` : ''}
+      <div class="nums"><div><small>на hh.ru</small><b>${fmt(x.total)}</b>${delta ? ` <small>${delta > 0 ? '+' : ''}${delta} с прошлого</small>` : ''}</div><div><small>в панели</small><b>${mine.length}</b></div><div><small>медиана</small><b>${kfmt(x.median)}</b></div></div>
+      <div class="row"><button class="btn" data-open="${esc(s.id)}">Показать вакансии</button><a class="btn" href="https://hh.ru/search/vacancy?${q}" target="_blank" rel="noopener">На hh.ru</a></div></div>`;
+  }).join('');
+}
+$('#srch').addEventListener('click', e => {
+  const b = e.target.closest('[data-open]'); if (!b) return;
+  st.search = $('#fSearch').value = b.dataset.open; go('list');
+});
+
+/* ---------- профиль ---------- */
+function renderProfile() {
+  $('#mySkills').innerHTML = ALL_SKILLS.map(s => `<button class="${prof.skills.includes(s) ? 'on' : ''}" data-s="${esc(s)}">${esc(s)}</button>`).join('');
+  $('#pName').value = prof.name; $('#pAbout').value = prof.about; $('#pContact').value = prof.contact;
+}
+$('#mySkills').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const s = b.dataset.s; prof.skills = prof.skills.includes(s) ? prof.skills.filter(x => x !== s) : [...prof.skills, s];
+  saveProf(); b.classList.toggle('on');
+});
+let svT;
+function saveProf() { store.set('profile', prof); $('#saved').style.opacity = 1; clearTimeout(svT); svT = setTimeout(() => $('#saved').style.opacity = 0, 1200); }
+[['#pName', 'name'], ['#pAbout', 'about'], ['#pContact', 'contact']].forEach(([s, k]) => $(s).addEventListener('input', e => { prof[k] = e.target.value; saveProf(); }));
+
+/* ---------- сопроводительное письмо ---------- */
+let cur = null, variant = 0;
+function letter(v, n) {
+  const have = v.skills.filter(s => prof.skills.includes(s)), miss = v.skills.filter(s => !prof.skills.includes(s));
+  const co = v.company ? ` в ${v.company}` : '';
+  const open = [
+    `Здравствуйте!\n\nМеня заинтересовала вакансия «${v.name}»${co}.`,
+    `Добрый день!\n\nУвидел(а) вашу вакансию «${v.name}»${co} и хочу откликнуться.`,
+    `Здравствуйте!\n\nОткликаюсь на вакансию «${v.name}»${co}: задачи из описания мне близки.`,
+  ][n % 3];
+  const parts = [open];
+  if (prof.about.trim()) parts.push(prof.about.trim());
+  if (have.length) parts.push(`По требованиям вакансии: у меня есть практический опыт с ${have.slice(0, 5).join(', ')}.`);
+  if (miss.length && have.length) parts.push(`${miss.slice(0, 2).join(' и ')} сейчас активно изучаю и готов(а) быстро подтянуть под ваши задачи.`);
+  const task = (v.resp || '').split(/[.;!?]\s/)[0].trim();      // первая задача из описания, если она цельная
+  if (task && !/^(\.\.\.|…)/.test(v.resp) && task.length > 15 && task.length < 140) parts.push(`Особенно интересна задача «${task.replace(/[.…]+$/, '')}».`);
+  parts.push(['С удовольствием расскажу подробнее на собеседовании.', 'Буду рад(а) обсудить детали в удобное для вас время.', 'Готов(а) выполнить тестовое задание.'][n % 3]);
+  const sign = [prof.name.trim(), prof.contact.trim()].filter(Boolean).join('\n');
+  return parts.join('\n\n') + (sign ? '\n\n' + sign : '');
+}
+function openLetter(v) {
+  cur = v; variant = 0;
+  $('#dTitle').textContent = v.name; $('#dCo').textContent = `${v.company} · ${v.city}`;
+  $('#dText').value = letter(v, 0);
+  $('#dHint').textContent = prof.skills.length || prof.about ? 'Письмо можно поправить прямо здесь. Окончания «(а)» уберите под себя.' : 'Заполните «Профиль» (навыки, о себе, контакты), и письмо станет точнее.';
+  $('#dlg').showModal();
+}
+async function copy() { try { await navigator.clipboard.writeText($('#dText').value); toast('Скопировано'); } catch { $('#dText').select(); document.execCommand('copy'); toast('Скопировано'); } }
+$('#dX').onclick = () => $('#dlg').close();
+$('#dlg').addEventListener('click', e => { if (e.target === $('#dlg')) $('#dlg').close(); });
+$('#dCopy').onclick = copy;
+$('#dRedo').onclick = () => { $('#dText').value = letter(cur, ++variant); };
+$('#dGo').onclick = async () => { await copy(); window.open(cur.url, '_blank', 'noopener'); };
+
+/* ---------- Excel ---------- */
+$('#xlsx').onclick = async () => {
+  if (!window.XLSX) { toast('Загружаю модуль Excel…'); await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = no; document.head.append(s); }).catch(() => toast('Не удалось загрузить модуль Excel')); }
+  if (!window.XLSX) return;
+  const rows = sorted(filtered()).map(v => ({
+    'Вакансия': v.name, 'Компания': v.company, 'Город': v.city, 'З/п от': v.salary_from, 'З/п до': v.salary_to, 'Валюта': v.currency,
+    'Опыт': v.experience, 'Формат': v.formats.join(', '), 'Навыки': v.skills.join(', '), 'Опубликована': (v.published || '').replace('T', ' '),
+    'Откликов': v.responses, 'Статус': { fav: 'избранное', done: 'откликнулся', hide: 'скрыта' }[marks[v.id]] || '', 'Ссылка': v.url,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [40, 26, 14, 10, 10, 7, 10, 16, 36, 16, 9, 12, 34].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Вакансии');
+  XLSX.writeFile(wb, `vacancies_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+/* ---------- фильтры, вкладки ---------- */
+function bindSeg(sel, key, attr) {
+  $(sel).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$(sel + ' button').forEach(x => x.classList.toggle('on', x === b));
+    st[key] = b.dataset[attr]; st.limit = 40; renderList();
+  });
+}
+bindSeg('#fStatus', 'status', 's'); bindSeg('#fSort', 'sort', 'o');
+let qT;
+$('#q').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { st.q = e.target.value; st.limit = 40; renderList(); }, 150); });
+[['#fSearch', 'search'], ['#fExp', 'exp'], ['#fFmt', 'fmt']].forEach(([s, k]) => $(s).addEventListener('change', e => { st[k] = e.target.value; st.limit = 40; renderList(); }));
+$('#fSal').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); st.sal = +e.target.value || 0; st.limit = 40; renderList(); });
+$('#fHasSal').addEventListener('change', e => { st.hasSal = e.target.checked; renderList(); });
+$('#fNew').addEventListener('change', e => { st.onlyNew = e.target.checked; renderList(); });
+$('#moreBtn').onclick = () => { st.limit += 40; renderList(); };
+
+function go(v) {
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  ({ list: renderList, stats: renderStats, searches: renderSearches, profile: renderProfile })[v]();
+  store.set('tab', v); scrollTo({ top: 0 });
+}
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) go(b.dataset.v); });
+
+let tT;
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(tT); tT = setTimeout(() => el.classList.remove('on'), 2200); }
+
+/* ---------- загрузка ---------- */
+(async () => {
+  try {
+    const [d, h] = await Promise.all([fetch('data/vacancies.json', { cache: 'no-cache' }).then(r => r.json()), fetch('data/history.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => [])]);
+    DB = d; HIST = h; DB.firstRun = HIST[0]?.t; now = Date.now();
+  } catch {
+    $('#upd').textContent = 'не удалось загрузить данные';
+    $('#list').innerHTML = '<div class="empty">Данных пока нет. Их кладёт сюда сборщик collector.py.</div>';
+    return;
+  }
+  const u = new Date(DB.updated + ':00+03:00');
+  $('#upd').innerHTML = `<span class="dot"></span>обновлено <b>${u.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' })}</b> МСК<span class="long"><br>сбор каждые 6 часов</span>`;
+  $('#fSearch').insertAdjacentHTML('beforeend', DB.searches.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(''));
+  go(store.get('tab', 'list'));
+})();
+</script>
+</body>
+</html>
