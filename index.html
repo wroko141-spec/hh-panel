@@ -74,6 +74,7 @@ main.wrap{padding-top:24px;padding-bottom:80px}
 .vac.done{opacity:.62}
 .vac h3{font-size:16px;line-height:1.3;font-weight:700}
 .vac h3 a:hover{color:var(--moon);text-shadow:0 0 18px rgba(190,210,255,.5)}
+.gone{display:inline-block;font:500 11px Manrope;color:var(--bad);border:1px solid rgba(255,122,107,.35);border-radius:6px;padding:1px 6px;margin-left:8px;vertical-align:3px}
 .new{display:inline-block;font:600 10px Manrope;letter-spacing:.08em;text-transform:uppercase;color:#0a0b0f;background:var(--accent);border-radius:6px;padding:2px 6px;margin-left:8px;vertical-align:3px}
 .co{color:var(--mute);font-size:14px;margin-top:3px}
 .co .star{color:#ffd36b}
@@ -293,6 +294,7 @@ const ICON = {
 let DB = { vacancies: [], searches: [], stats: {} }, HIST = [];
 let marks = store.get('marks', {});          // id -> 'fav' | 'done' | 'hide'
 let prof = store.get('profile', { skills: [], name: '', about: '', contact: '' });
+const markOf = v => { for (const id of v.ids || [v.id]) if (marks[id]) return marks[id]; return undefined; };
 let st = { q: '', search: '', exp: '', fmt: '', sal: 0, hasSal: false, onlyNew: false, status: '', sort: 'date', limit: 40 };
 let now = Date.now();
 
@@ -322,17 +324,17 @@ function ago(s) {
 function filtered(ignoreStatus) {
   const q = st.q.trim().toLowerCase();
   return DB.vacancies.filter(v => {
-    const mk = marks[v.id];
+    const mk = markOf(v);
     if (!ignoreStatus) {
       if (st.status ? mk !== st.status : mk === 'hide') return false;
     } else if (mk === 'hide') return false;
     if (st.search && !v.searches.includes(st.search)) return false;
     if (st.exp && v.experience !== st.exp) return false;
     if (st.fmt && !v.formats.includes(st.fmt)) return false;
-    if (st.hasSal && salOf(v) == null) return false;
+    if (st.hasSal && !(v.salary_from || v.salary_to)) return false;
     if (st.sal && !(monthly(v) && (v.salary_from || v.salary_to) >= st.sal)) return false;   // нижняя граница вилки
     if (st.onlyNew && !isNew(v)) return false;
-    if (q && !(v.name + ' ' + v.company + ' ' + v.skills.join(' ') + ' ' + v.req).toLowerCase().includes(q)) return false;
+    if (q && !(v.name + ' ' + v.company + ' ' + (v.cities || [v.city]).join(' ') + ' ' + v.skills.join(' ') + ' ' + v.req + ' ' + v.resp).toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -349,7 +351,7 @@ function sorted(a) {
 function renderList() {
   const all = sorted(filtered());
   $('#found').innerHTML = `Найдено <b>${all.length}</b>`;
-  $('#cntAll').textContent = DB.vacancies.filter(v => marks[v.id] !== 'hide').length;
+  $('#cntAll').textContent = DB.vacancies.filter(v => markOf(v) !== 'hide').length;
   $('#reset').hidden = !(st.q || st.search || st.exp || st.fmt || st.sal || st.hasSal || st.onlyNew);
   const part = all.slice(0, st.limit);
   $('#moreBtn').hidden = all.length <= st.limit;
@@ -358,15 +360,15 @@ function renderList() {
     return;
   }
   $('#list').innerHTML = part.map(v => {
-    const mk = marks[v.id], s = salText(v), m = matchOf(v);
+    const mk = markOf(v), s = salText(v), m = matchOf(v), gone = v.last_seen && v.last_seen < DB.updated;
     const fmtTags = v.formats.map(f => `<span class="tag">${esc(f)}</span>`).join('');
     const sk = v.skills.map(x => `<span class="tag sk${prof.skills.includes(x) ? ' my' : ''}">${esc(x)}</span>`).join('');
-    return `<article class="vac${mk === 'fav' ? ' fav' : ''}${mk === 'done' ? ' done' : ''}" data-id="${v.id}">
+    return `<article class="vac${mk === 'fav' ? ' fav' : ''}${mk === 'done' || gone ? ' done' : ''}" data-id="${v.id}">
       <div>
-        <h3><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.name)}</a>${isNew(v) ? '<span class="new">новая</span>' : ''}</h3>
+        <h3><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.name)}</a>${isNew(v) ? '<span class="new">новая</span>' : ''}${gone ? `<span class="gone" title="Последний раз была в поиске ${esc(v.last_seen.replace('T', ' '))}">пропала из поиска, возможно закрыта</span>` : ''}</h3>
         <div class="co">${esc(v.company)}${v.rating ? ` <span class="star">★</span> ${esc(v.rating)}` : ''} · ${esc(cityText(v))}</div>
       </div>
-      <div><div class="sal${s ? '' : ' none'}">${s ? esc(s) : 'з/п не указана'}</div><div class="when">${salNote(v) ? salNote(v) + ' · ' : ''}${ago(v.published)}${v.responses != null ? ' · откликов: ' + v.responses : ''}</div></div>
+      <div><div class="sal${s ? '' : ' none'}">${s ? esc(s) : 'з/п не указана'}</div><div class="when">${salNote(v) ? salNote(v) + ' · ' : ''}${ago(v.published)}${v.responses != null ? ` · <span title="Число из данных hh.ru, на сайте его не показывают, оно примерное">~${fmt(v.responses)} откликов</span>` : ''}</div></div>
       <div class="info"><span class="tag">опыт: ${esc(v.experience || '–')}</span>${fmtTags}${sk}</div>
       ${v.req ? `<p class="req">${esc(v.req)}</p>` : ''}
       <div class="acts">
@@ -385,7 +387,9 @@ $('#list').addEventListener('click', e => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const id = +b.closest('.vac').dataset.id, a = b.dataset.a;
   if (a === 'letter') return openLetter(DB.vacancies.find(v => v.id === id));
-  marks[id] === a ? delete marks[id] : (marks[id] = a);
+  const v = DB.vacancies.find(x => x.id === id), had = markOf(v);
+  (v.ids || [v.id]).forEach(i => delete marks[i]);
+  if (had !== a) marks[id] = a;
   store.set('marks', marks);
   renderList();
   if (a === 'hide' && marks[id]) toast('Скрыто. Вернуть можно во вкладке «Скрытые»');
@@ -410,34 +414,34 @@ function hbars(el, rows, valFmt, tipFmt) {
 function renderStats() {
   const a = filtered(true);
   const withSal = a.filter(v => salOf(v) != null);
-  const sals = withSal.map(salOf);
+  const sals = withSal.map(salOf), anySal = a.filter(v => v.salary_from || v.salary_to).length;
   const fresh = a.filter(v => now - msk(v.published) < 864e5).length;
-  const desc = [st.search && DB.searches.find(s => s.id === st.search)?.title, st.exp && 'опыт ' + st.exp, st.fmt, st.q && `«${st.q}»`].filter(Boolean);
+  const desc = [st.search && DB.searches.find(s => s.id === st.search)?.title, st.exp && 'опыт: ' + st.exp, st.fmt, st.sal && 'з/п от ' + fmt(st.sal) + ' ₽', st.hasSal && 'с зарплатой', st.onlyNew && 'только новые', st.q && `«${st.q}»`].filter(Boolean);
   $('#statsNote').textContent = 'Считается по текущим фильтрам со вкладки «Вакансии»' + (desc.length ? ': ' + desc.join(', ') : ' (сейчас все вакансии)') + '. Скрытые не учитываются.';
   $('#kpis').innerHTML = [
     ['Вакансий', fmt(a.length), 'в выборке'],
-    ['Медиана з/п', sals.length ? fmt(median(sals)) + ' ₽' : '–', 'в месяц, как в вакансиях'],
-    ['Указана з/п', a.length ? Math.round(withSal.length / a.length * 100) + '%' : '–', `${withSal.length} из ${a.length}`],
+    ['Медиана з/п', sals.length ? fmt(median(sals)) + ' ₽' : '–', 'середина вилки, ₽ в месяц'],
+    ['Указана з/п', a.length ? Math.round(anySal / a.length * 100) + '%' : '–', `${anySal} из ${a.length}`],
     ['За сутки', fmt(fresh), 'опубликовано'],
   ].map(([k, v, s]) => `<div class="kpi"><small>${k}</small><div>${v}</div><span>${s}</span></div>`).join('');
 
   const exps = ['нет', '1–3 года', '3–6 лет', '6+ лет'];
   hbars('#chExp', exps.map(k => { const x = withSal.filter(v => v.experience === k).map(salOf); return { k: k === 'нет' ? 'без опыта' : k, v: median(x) || 0, n: x.length }; }).filter(r => r.n),
-    v => kfmt(Math.round(v)), r => `<b>Опыт: ${r.k}</b>медиана ${fmt(r.v)} ₽ · вакансий с з/п: ${r.n}`);
+    v => kfmt(Math.round(v)), r => `<b>Опыт: ${esc(r.k)}</b>медиана ${fmt(r.v)} ₽ · вакансий с з/п: ${r.n}`);
 
   const sk = {}; a.forEach(v => v.skills.forEach(s => sk[s] = (sk[s] || 0) + 1));
   hbars('#chSkills', Object.entries(sk).sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k, v]) => ({ k, v })),
-    v => v, r => `<b>${r.k}</b>${r.v} вакансий · ${Math.round(r.v / a.length * 100)}%${prof.skills.includes(r.k) ? ' · есть у вас' : ''}`);
+    v => v, r => `<b>${esc(r.k)}</b>${r.v} вакансий · ${Math.round(r.v / a.length * 100)}%${prof.skills.includes(r.k) ? ' · есть у вас' : ''}`);
 
   const co = {}; a.forEach(v => co[v.company] = (co[v.company] || 0) + 1);
-  hbars('#chCo', Object.entries(co).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => ({ k, v })), v => v, r => `<b>${r.k}</b>вакансий: ${r.v}`);
+  hbars('#chCo', Object.entries(co).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => ({ k, v })), v => v, r => `<b>${esc(r.k)}</b>вакансий: ${r.v}`);
 
   const fm = {}; a.forEach(v => (v.formats.length ? v.formats : ['не указан']).forEach(f => fm[f] = (fm[f] || 0) + 1));
-  hbars('#chFmt', Object.entries(fm).sort((x, y) => y[1] - x[1]).map(([k, v]) => ({ k, v })), v => Math.round(v / a.length * 100) + '%', r => `<b>${r.k}</b>${r.v} вакансий`);
+  hbars('#chFmt', Object.entries(fm).sort((x, y) => y[1] - x[1]).map(([k, v]) => ({ k, v })), v => Math.round(v / a.length * 100) + '%', r => `<b>${esc(r.k)}</b>${r.v} вакансий`);
 
   const days = [...Array(14)].map((_, i) => { const d = new Date(now - (13 - i) * 864e5); return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }); });
   const cnt = days.map(d => a.filter(v => (v.published || '').startsWith(d)).length), mx = Math.max(...cnt, 1);
-  $('#chDays').innerHTML = `<div class="cols">${days.map((d, i) => `<div class="c" style="--h:${cnt[i] / mx * 100}%" data-tip="<b>${new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</b>опубликовано: ${cnt[i]}"><i style="height:${cnt[i] / mx * 100}%"></i>${cnt[i] && (i === 13 || cnt[i] === mx) ? `<em>${cnt[i]}</em>` : ''}</div>`).join('')}</div>
+  $('#chDays').innerHTML = `<div class="cols">${days.map((d, i) => `<div class="c" style="--h:${cnt[i] / mx * 100}%" data-tip="<b>${new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' })}</b>опубликовано: ${cnt[i]}"><i style="height:${cnt[i] / mx * 100}%"></i>${cnt[i] && (i === 13 || cnt[i] === mx) ? `<em>${cnt[i]}</em>` : ''}</div>`).join('')}</div>
     <div class="xl">${days.map((d, i) => `<span>${i % 2 === 1 ? '' : +d.slice(8)}</span>`).join('')}</div>`;
 
   const bins = [[0, 50e3, 'до 50k'], [50e3, 80e3, '50–80k'], [80e3, 120e3, '80–120k'], [120e3, 180e3, '120–180k'], [180e3, 250e3, '180–250k'], [250e3, 1e12, '250k+']];
@@ -450,7 +454,7 @@ const EXPN = { noExperience: 'без опыта', between1And3: '1–3 года'
 function renderSearches() {
   $('#srch').innerHTML = DB.searches.map(s => {
     const x = DB.stats[s.id] || {}, mine = DB.vacancies.filter(v => v.searches.includes(s.id));
-    const q = new URLSearchParams({ text: s.text, area: s.area || 113 });
+    const q = new URLSearchParams({ text: s.text, area: s.area || 113, search_field: s.search_field || 'name' });
     if (s.experience) q.set('experience', s.experience); if (s.work_format) q.set('work_format', s.work_format);
     const tr = HIST.filter(h => h[s.id]).map(h => h[s.id].total);
     const delta = tr.length > 1 ? tr[tr.length - 1] - tr[tr.length - 2] : null;
@@ -484,7 +488,7 @@ function saveProf() { store.set('profile', prof); $('#saved').style.opacity = 1;
 let cur = null, variant = 0;
 function letter(v, n) {
   const have = v.skills.filter(s => prof.skills.includes(s)), miss = v.skills.filter(s => !prof.skills.includes(s));
-  const co = v.company ? ` в ${v.company}` : '';
+  const co = v.company ? ` в компании «${v.company}»` : '';
   const open = [
     `Здравствуйте!\n\nМеня заинтересовала вакансия «${v.name}»${co}.`,
     `Добрый день!\n\nУвидел(а) вашу вакансию «${v.name}»${co} и хочу откликнуться.`,
@@ -507,24 +511,27 @@ function openLetter(v) {
   $('#dHint').textContent = prof.skills.length || prof.about ? 'Письмо можно поправить прямо здесь. Окончания «(а)» уберите под себя.' : 'Заполните «Профиль» (навыки, о себе, контакты), и письмо станет точнее.';
   $('#dlg').showModal();
 }
-async function copy() { try { await navigator.clipboard.writeText($('#dText').value); toast('Скопировано'); } catch { $('#dText').select(); document.execCommand('copy'); toast('Скопировано'); } }
+async function copy() {
+  try { await navigator.clipboard.writeText($('#dText').value); toast('Скопировано'); }
+  catch { $('#dText').select(); toast(document.execCommand('copy') ? 'Скопировано' : 'Не удалось скопировать: выделите текст и нажмите Ctrl+C'); }
+}
 $('#dX').onclick = () => $('#dlg').close();
 $('#dlg').addEventListener('click', e => { if (e.target === $('#dlg')) $('#dlg').close(); });
 $('#dCopy').onclick = copy;
 $('#dRedo').onclick = () => { $('#dText').value = letter(cur, ++variant); };
-$('#dGo').onclick = () => { window.open(cur.url, '_blank', 'noopener'); copy(); };
+$('#dGo').onclick = () => { copy(); window.open(cur.url, '_blank', 'noopener'); };   // копируем, пока вкладка в фокусе
 
 /* ---------- Excel ---------- */
 $('#xlsx').onclick = async () => {
   if (!window.XLSX) { toast('Загружаю модуль Excel…'); await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = no; document.head.append(s); }).catch(() => toast('Не удалось загрузить модуль Excel')); }
   if (!window.XLSX) return;
   const rows = sorted(filtered()).map(v => ({
-    'Вакансия': v.name, 'Компания': v.company, 'Город': (v.cities || [v.city]).join(', '), 'До вычета': v.gross ? 'да' : '', 'З/п от': v.salary_from, 'З/п до': v.salary_to, 'Валюта': v.currency,
+    'Вакансия': v.name, 'Компания': v.company, 'Город': (v.cities || [v.city]).join(', '), 'До вычета': v.gross ? 'да' : '', 'З/п от': v.salary_from, 'З/п до': v.salary_to, 'Валюта': v.currency, 'Период': { MONTH: 'месяц', HOUR: 'час', SHIFT: 'смена', SERVICE: 'за услугу', YEAR: 'год' }[v.salary_mode] || '',
     'Опыт': v.experience, 'Формат': v.formats.join(', '), 'Навыки': v.skills.join(', '), 'Опубликована': (v.published || '').replace('T', ' '),
-    'Откликов': v.responses, 'Статус': { fav: 'избранное', done: 'откликнулся', hide: 'скрыта' }[marks[v.id]] || '', 'Ссылка': v.url,
+    'Откликов': v.responses, 'Статус': { fav: 'избранное', done: 'откликнулся', hide: 'скрыта' }[markOf(v)] || '', 'Ссылка': v.url,
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [40, 26, 18, 10, 10, 10, 7, 10, 16, 36, 16, 9, 12, 34].map(w => ({ wch: w }));
+  ws['!cols'] = [40, 26, 18, 10, 10, 10, 7, 10, 10, 16, 36, 16, 9, 12, 34].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Вакансии');
   XLSX.writeFile(wb, `vacancies_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
@@ -551,6 +558,7 @@ $('#fHasSal').addEventListener('change', e => { st.hasSal = e.target.checked; re
 $('#fNew').addEventListener('change', e => { st.onlyNew = e.target.checked; renderList(); });
 $('#moreBtn').onclick = () => { st.limit += 40; renderList(); };
 $('#reset').onclick = () => {
+  clearTimeout(sT); clearTimeout(qT);
   Object.assign(st, { q: '', search: '', exp: '', fmt: '', sal: 0, hasSal: false, onlyNew: false, limit: 40 });
   ['#q', '#fSearch', '#fExp', '#fFmt', '#fSal'].forEach(s => $(s).value = ''); $('#fHasSal').checked = $('#fNew').checked = false; $('#salHint').textContent = '';
   renderList();

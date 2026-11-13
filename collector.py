@@ -81,6 +81,14 @@ def normalize(v):
     }
 
 
+def mid(v):
+    """Середина вилки - так же, как считает панель. Только месячная зарплата в рублях."""
+    a, b = v["salary_from"], v["salary_to"]
+    if v["currency"] != "RUR" or v["salary_mode"] not in (None, "MONTH") or not (a or b):
+        return None
+    return (a + b) / 2 if a and b else a or b
+
+
 def run_search(s):
     params = {"text": s["text"], "area": s.get("area", 113), "items_on_page": 50,
               "search_field": s.get("search_field", "name"),   # искать слова только в названии вакансии
@@ -126,12 +134,17 @@ def notify(new, searches):
         return
     def money(v):
         a, b = v["salary_from"], v["salary_to"]
-        if not (a or b): return "з/п не указана"
-        return (f"от {a:,}" if a else "") + (f" до {b:,}" if b else "") + " ₽".replace(",", " ")
+        if not (a or b):
+            return "з/п не указана"
+        n = lambda x: f"{x:,}".replace(",", " ")
+        cur = {"RUR": "₽", "USD": "$", "EUR": "€"}.get(v["currency"], v["currency"] or "")
+        per = {"HOUR": "/час", "SHIFT": "/смена", "SERVICE": " за услугу"}.get(v["salary_mode"], "")
+        s = f"{n(a)}–{n(b)}" if a and b else (f"от {n(a)}" if a else f"до {n(b)}")
+        return f"{s} {cur}{per}" + (" до вычета" if v.get("gross") else "")
     lines = [f"🆕 Новых вакансий: {len(new)}"]
     for v in new[:15]:
         lines.append(f"\n<b>{html.escape(v['name'])}</b> - {html.escape(v['company'])}\n"
-                     f"{v['city']}, {money(v).replace(',', ' ')}\n{v['url']}")
+                     f"{v['city']}, {money(v)}\n{v['url']}")
     if len(new) > 15:
         lines.append(f"\n…и ещё {len(new) - 15} в панели")
     body = urllib.parse.urlencode({"chat_id": chat, "text": "".join(lines), "parse_mode": "HTML",
@@ -160,8 +173,7 @@ def main():
             log("  ошибка:", e)
             stats[s["id"]] = {"error": str(e)}
             continue
-        sal = [v["salary_from"] or v["salary_to"] for v in items   # только месячная в рублях
-               if (v["salary_from"] or v["salary_to"]) and v["currency"] == "RUR" and v["salary_mode"] in (None, "MONTH")]
+        sal = [mid(v) for v in items if mid(v)]
         stats[s["id"]] = {"total": total, "got": len(items), "median": round(statistics.median(sal)) if sal else None}
         for v in items:
             prev = seen.get(v["id"]) or old.get(v["id"])
@@ -181,6 +193,8 @@ def main():
     keep = os.environ.get("HH_FRESH") != "1"   # HH_FRESH=1 - выбросить всё, чего нет в текущей выдаче
     for vid, v in old.items():           # не нашли сейчас, но видели недавно - оставляем
         if keep and vid not in seen and v.get("last_seen", "") >= cutoff:
+            if any("error" in stats.get(s, {}) for s in v.get("searches", [])):
+                v["last_seen"] = stamp   # поиск не сработал (капча) - не считаем, что вакансия пропала
             seen[vid] = v
     # одна и та же вакансия, размещённая в нескольких городах, -> одна карточка со списком городов
     groups = {}
@@ -188,14 +202,18 @@ def main():
         k = (v["name"].strip().lower(), v["company"], v["salary_from"], v["salary_to"])
         if k in groups:
             g = groups[k]
-            g["copies"] = g.get("copies", 1) + 1
+            g["copies"] += 1
+            g["ids"].append(v["id"])
             if v["city"] not in g["cities"]:
                 g["cities"].append(v["city"])
             g["searches"] = sorted(set(g["searches"]) | set(v["searches"]))
+            g["first_seen"] = min(g["first_seen"], v["first_seen"])
+            g["last_seen"] = max(g["last_seen"], v["last_seen"])
         else:
-            v["cities"], v["copies"] = [v["city"]], 1
+            v["cities"], v["copies"], v["ids"] = [v["city"]], 1, [v["id"]]
             groups[k] = v
     vac = list(groups.values())
+    new = [g for g in vac if g["first_seen"] == stamp]   # без дублей
     save("vacancies.json", {"updated": stamp, "searches": searches, "stats": stats, "vacancies": vac})
     history.append({"t": stamp, **{k: {"total": x.get("total"), "median": x.get("median")}
                                    for k, x in stats.items() if "total" in x}})
