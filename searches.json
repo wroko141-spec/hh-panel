@@ -1,6 +1,6 @@
 [
-  {"id": "py-remote",  "title": "Python, удалённо", "text": "python", "area": 113, "work_format": "REMOTE", "pages": 2},
+  {"id": "py-remote", "title": "Python, удалённо", "text": "python", "area": 113, "work_format": "REMOTE", "pages": 2},
   {"id": "front-remote", "title": "Frontend, удалённо", "text": "frontend", "area": 113, "work_format": "REMOTE", "pages": 2},
-  {"id": "web-kazan",  "title": "Веб-разработчик, Казань", "text": "веб OR web OR frontend OR верстальщик OR фронтенд", "area": 88, "pages": 2},
-  {"id": "py-kazan",   "title": "Python, Казань", "text": "python", "area": 88, "pages": 2}
+  {"id": "web-kazan", "title": "Веб-разработчик, Казань", "text": "frontend OR фронтенд OR \"веб разработчик\" OR \"web разработчик\" OR \"web developer\" OR \"верстальщик сайтов\" OR \"html верстальщик\"", "area": 88, "pages": 2},
+  {"id": "py-kazan", "title": "Python, Казань", "text": "python", "area": 88, "pages": 2}
 ]
